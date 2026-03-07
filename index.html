@@ -1,1253 +1,740 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Score Board Live</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
-    <!-- QR Code (plain script, no module needed) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
-    <style>
-        :root {
-            --bg: #080a0f;
-            --surface: #10131a;
-            --surface2: #181c26;
-            --border: #1e2330;
-            --border2: #252c3d;
-            --gold: #f5c842;
-            --green: #34d97b;
-            --red: #f0504d;
-            --blue: #4f8ef7;
-            --orange: #f07844;
-            --text: #eef0f8;
-            --muted: #5a6180;
-            --r: 16px;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        html,
-        body {
-            font-family: 'DM Sans', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
-            background-size: 60px 60px;
-            opacity: .35;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        body::after {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(245, 200, 66, .07), transparent 70%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .wrap {
-            position: relative;
-            z-index: 1;
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 24px 16px 80px;
-        }
-
-        /* HEADER */
-        .header {
-            text-align: center;
-            margin-bottom: 28px;
-        }
-
-        .live-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(52, 217, 123, .1);
-            border: 1px solid rgba(52, 217, 123, .3);
-            color: var(--green);
-            font-size: .72rem;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            padding: 5px 14px;
-            border-radius: 50px;
-            margin-bottom: 14px;
-        }
-
-        .live-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: var(--green);
-            animation: livePulse 1.4s infinite;
-        }
-
-        @keyframes livePulse {
-
-            0%,
-            100% {
-                opacity: 1;
-                transform: scale(1)
-            }
-
-            50% {
-                opacity: .4;
-                transform: scale(.7)
-            }
-        }
-
-        .title-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-        #game-title {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: clamp(2.6rem, 8vw, 4.8rem);
-            letter-spacing: 4px;
-            color: var(--gold);
-            background: transparent;
-            border: none;
-            outline: none;
-            text-align: center;
-            width: auto;
-            min-width: 40px;
-            cursor: text;
-            text-shadow: 0 0 40px rgba(245, 200, 66, .3);
-        }
-
-        .edit-ico {
-            color: var(--muted);
-            cursor: pointer;
-            font-size: 1rem;
-            transition: color .2s;
-        }
-
-        .edit-ico:hover {
-            color: var(--gold);
-        }
-
-        .meta {
-            display: flex;
-            gap: 18px;
-            justify-content: center;
-            flex-wrap: wrap;
-            font-size: .8rem;
-            color: var(--muted);
-            margin-top: 6px;
-        }
-
-        .meta span {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        /* CONNECTION */
-        .conn-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 50px;
-            padding: 8px 18px;
-            margin: 0 auto 22px;
-            width: fit-content;
-            font-size: .8rem;
-            color: var(--muted);
-        }
-
-        .conn-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--muted);
-            transition: background .4s;
-        }
-
-        .conn-dot.online {
-            background: var(--green);
-        }
-
-        .conn-dot.offline {
-            background: var(--red);
-        }
-
-        /* TIMER */
-        .timer-panel {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--r);
-            padding: 18px 22px;
-            margin-bottom: 22px;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 14px;
-        }
-
-        .timer-display {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 3rem;
-            letter-spacing: 5px;
-            color: var(--text);
-            min-width: 105px;
-            transition: color .3s;
-        }
-
-        .timer-display.warn {
-            color: var(--orange);
-        }
-
-        .timer-display.danger {
-            color: var(--red);
-            animation: blink .5s infinite alternate;
-        }
-
-        @keyframes blink {
-            from {
-                opacity: 1
-            }
-
-            to {
-                opacity: .3
-            }
-        }
-
-        .t-presets {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .t-pre {
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            color: var(--muted);
-            font-size: .8rem;
-            font-family: 'DM Sans', sans-serif;
-            padding: 6px 13px;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all .2s;
-        }
-
-        .t-pre:hover,
-        .t-pre.on {
-            background: var(--gold);
-            color: #000;
-            border-color: var(--gold);
-        }
-
-        .t-custom {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .t-custom input {
-            width: 56px;
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            color: var(--text);
-            padding: 6px 8px;
-            border-radius: 8px;
-            font-size: .8rem;
-            text-align: center;
-            font-family: 'DM Sans', sans-serif;
-            outline: none;
-        }
-
-        .tico {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform .15s;
-        }
-
-        .tico:hover {
-            transform: scale(1.1);
-        }
-
-        .t-play {
-            background: var(--green);
-            color: #000;
-        }
-
-        .t-pause {
-            background: var(--gold);
-            color: #000;
-        }
-
-        .t-rst {
-            background: var(--surface2);
-            color: var(--text);
-            border: 1px solid var(--border2);
-        }
-
-        .t-hide {
-            margin-left: auto;
-            background: none;
-            border: 1px solid var(--border2);
-            color: var(--muted);
-            padding: 6px 14px;
-            border-radius: 50px;
-            font-size: .78rem;
-            cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
-            transition: all .2s;
-        }
-
-        .t-hide:hover {
-            border-color: var(--gold);
-            color: var(--gold);
-        }
-
-        /* COUNTDOWN */
-        .cdown {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, .88);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity .25s;
-        }
-
-        .cdown.show {
-            opacity: 1;
-            pointer-events: all;
-        }
-
-        .cdown-num {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 22vw;
-            color: var(--gold);
-        }
-
-        @keyframes cPop {
-            0% {
-                transform: scale(2);
-                opacity: 0
-            }
-
-            25% {
-                transform: scale(1);
-                opacity: 1
-            }
-
-            75% {
-                transform: scale(1);
-                opacity: 1
-            }
-
-            100% {
-                transform: scale(.5);
-                opacity: 0
-            }
-        }
-
-        /* TEAMS */
-        #teams-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-            gap: 18px;
-            margin-bottom: 22px;
-        }
-
-        .team-box {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--r);
-            padding: 26px 18px 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 14px;
-            position: relative;
-            transition: border-color .3s, box-shadow .3s, transform .2s;
-        }
-
-        .team-box:hover {
-            transform: translateY(-2px);
-        }
-
-        .team-box.leader {
-            border-color: var(--gold);
-            box-shadow: 0 0 50px rgba(245, 200, 66, .15), inset 0 0 30px rgba(245, 200, 66, .04);
-        }
-
-        .leader-crown {
-            position: absolute;
-            top: -14px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--gold);
-            color: #000;
-            font-size: .68rem;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            padding: 3px 14px;
-            border-radius: 50px;
-            white-space: nowrap;
-            opacity: 0;
-            transition: opacity .3s;
-        }
-
-        .team-box.leader .leader-crown {
-            opacity: 1;
-        }
-
-        .color-strip {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            border-radius: var(--r) var(--r) 0 0;
-        }
-
-        .rm-team {
-            position: absolute;
-            top: 14px;
-            right: 14px;
-            background: none;
-            border: 1px solid var(--border2);
-            color: var(--muted);
-            width: 26px;
-            height: 26px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: .9rem;
-            transition: all .2s;
-        }
-
-        .rm-team:hover {
-            background: var(--red);
-            border-color: var(--red);
-            color: #fff;
-        }
-
-        .team-name {
-            background: transparent;
-            border: none;
-            border-bottom: 2px solid var(--border2);
-            color: var(--text);
-            font-family: 'DM Sans', sans-serif;
-            font-weight: 700;
-            font-size: 1.25rem;
-            text-align: center;
-            width: 82%;
-            outline: none;
-            padding-bottom: 5px;
-            transition: border-color .2s;
-        }
-
-        .team-name:focus {
-            border-bottom-color: var(--gold);
-        }
-
-        .ctrls {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            width: 100%;
-        }
-
-        .score-num {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 5.5rem;
-            line-height: 1;
-            color: var(--text);
-            flex: 1;
-            text-align: center;
-        }
-
-        .score-num.pop {
-            animation: sPop .18s ease-out;
-        }
-
-        @keyframes sPop {
-            0% {
-                transform: scale(1.3)
-            }
-
-            100% {
-                transform: scale(1)
-            }
-        }
-
-        .bscore {
-            width: 66px;
-            height: 66px;
-            border-radius: 50%;
-            border: none;
-            font-size: 1.9rem;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform .1s, background .2s;
-        }
-
-        .bscore:active {
-            transform: scale(.86);
-        }
-
-        .bminus {
-            background: rgba(240, 80, 77, .12);
-            color: var(--red);
-            border: 1.5px solid var(--red);
-        }
-
-        .bminus:hover {
-            background: var(--red);
-            color: #fff;
-        }
-
-        .bplus {
-            background: rgba(52, 217, 123, .12);
-            color: var(--green);
-            border: 1.5px solid var(--green);
-        }
-
-        .bplus:hover {
-            background: var(--green);
-            color: #000;
-        }
-
-        .steps {
-            display: flex;
-            gap: 6px;
-            justify-content: center;
-        }
-
-        .step {
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            color: var(--muted);
-            font-size: .74rem;
-            padding: 4px 10px;
-            border-radius: 50px;
-            cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
-            transition: all .15s;
-        }
-
-        .step:hover,
-        .step.on {
-            background: var(--gold);
-            color: #000;
-            border-color: var(--gold);
-        }
-
-        /* ACTION BAR */
-        .action-bar {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-bottom: 24px;
-        }
-
-        .btn-a {
-            padding: 12px 22px;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            font-size: .9rem;
-            font-weight: 600;
-            font-family: 'DM Sans', sans-serif;
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            transition: all .2s;
-        }
-
-        .btn-a:hover {
-            transform: translateY(-2px);
-            filter: brightness(1.12);
-        }
-
-        .b-add {
-            background: var(--gold);
-            color: #000;
-        }
-
-        .b-save {
-            background: var(--green);
-            color: #000;
-        }
-
-        .b-reset {
-            background: var(--surface2);
-            color: var(--text);
-            border: 1px solid var(--border2);
-        }
-
-        .b-qr {
-            background: var(--blue);
-            color: #fff;
-        }
-
-        .b-export {
-            background: var(--surface2);
-            color: var(--text);
-            border: 1px solid var(--border2);
-        }
-
-        /* STATS */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-
-        .stat {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 14px 16px;
-        }
-
-        .stat-l {
-            font-size: .68rem;
-            text-transform: uppercase;
-            letter-spacing: 1.8px;
-            color: var(--muted);
-            margin-bottom: 4px;
-        }
-
-        .stat-v {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 1.8rem;
-            letter-spacing: 1px;
-        }
-
-        /* QR MODAL */
-        .modal-bg {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, .8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1500;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity .3s;
-        }
-
-        .modal-bg.show {
-            opacity: 1;
-            pointer-events: all;
-        }
-
-        .modal {
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: 24px;
-            padding: 32px 28px;
-            text-align: center;
-            max-width: 340px;
-            width: 90%;
-        }
-
-        .modal h2 {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 1.8rem;
-            letter-spacing: 2px;
-            color: var(--gold);
-            margin-bottom: 6px;
-        }
-
-        .modal p {
-            font-size: .82rem;
-            color: var(--muted);
-            margin-bottom: 20px;
-        }
-
-        #qr-box {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 18px;
-        }
-
-        #qr-box canvas,
-        #qr-box img {
-            border-radius: 12px;
-        }
-
-        .qr-url {
-            font-size: .72rem;
-            color: var(--muted);
-            word-break: break-all;
-            margin-bottom: 18px;
-            padding: 8px 12px;
-            background: var(--surface2);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-        }
-
-        .modal-close {
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            color: var(--text);
-            padding: 10px 28px;
-            border-radius: 50px;
-            cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
-            font-size: .9rem;
-            transition: all .2s;
-        }
-
-        .modal-close:hover {
-            background: var(--red);
-            border-color: var(--red);
-        }
-
-        /* HISTORY */
-        .section-hd {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 1.4rem;
-            letter-spacing: 2px;
-            color: var(--muted);
-            margin-bottom: 14px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .section-hd::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: var(--border);
-        }
-
-        .hist-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .hist-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 14px 18px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            flex-wrap: wrap;
-            transition: all .2s;
-        }
-
-        .hist-card:hover {
-            border-color: var(--border2);
-            transform: translateX(4px);
-        }
-
-        .hist-date {
-            font-size: .76rem;
-            color: var(--muted);
-            min-width: 120px;
-        }
-
-        .hist-name {
-            font-weight: 700;
-            font-size: .95rem;
-            color: var(--gold);
-            flex: 1;
-            min-width: 100px;
-        }
-
-        .hist-chips {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .chip {
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            border-radius: 50px;
-            padding: 3px 12px;
-            font-size: .78rem;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .chip.win {
-            background: rgba(245, 200, 66, .12);
-            border-color: var(--gold);
-            color: var(--gold);
-        }
-
-        .hist-restore {
-            background: none;
-            border: 1px solid var(--border2);
-            color: var(--muted);
-            padding: 5px 12px;
-            border-radius: 50px;
-            font-size: .75rem;
-            cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
-            white-space: nowrap;
-            transition: all .2s;
-        }
-
-        .hist-restore:hover {
-            border-color: var(--gold);
-            color: var(--gold);
-        }
-
-        .hist-del {
-            background: none;
-            border: none;
-            color: var(--muted);
-            cursor: pointer;
-            font-size: .95rem;
-            padding: 4px;
-            transition: color .2s;
-        }
-
-        .hist-del:hover {
-            color: var(--red);
-        }
-
-        .empty {
-            color: var(--muted);
-            text-align: center;
-            padding: 28px;
-            font-size: .85rem;
-        }
-
-        /* TOAST */
-        .toast {
-            position: fixed;
-            bottom: 28px;
-            left: 50%;
-            transform: translateX(-50%) translateY(90px);
-            background: var(--green);
-            color: #000;
-            font-weight: 700;
-            padding: 11px 24px;
-            border-radius: 50px;
-            font-size: .88rem;
-            z-index: 3000;
-            transition: transform .3s;
-            pointer-events: none;
-        }
-
-        .toast.show {
-            transform: translateX(-50%) translateY(0);
-        }
-
-        /* ERROR BANNER */
-        .err-banner {
-            background: rgba(240, 80, 77, .15);
-            border: 1px solid var(--red);
-            border-radius: 12px;
-            padding: 14px 18px;
-            margin-bottom: 20px;
-            font-size: .85rem;
-            color: #f9b0af;
-            display: none;
-        }
-
-        .err-banner.show {
-            display: block;
-        }
-
-        @media(max-width:480px) {
-            .timer-panel {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .t-hide {
-                margin-left: 0;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Score Board Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#080a0f;--surface:#10131a;--surface2:#181c26;
+  --border:#1e2330;--border2:#252c3d;
+  --gold:#f5c842;--green:#34d97b;--red:#f0504d;
+  --blue:#4f8ef7;--orange:#f07844;--text:#eef0f8;--muted:#5a6180;--r:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:60px 60px;opacity:.35;pointer-events:none;z-index:0;}
+body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(245,200,66,.07),transparent 70%);pointer-events:none;z-index:0;}
+.wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:24px 16px 80px;}
+
+/* HEADER */
+.header{text-align:center;margin-bottom:28px;}
+.title-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;}
+#game-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.6rem,8vw,4.8rem);letter-spacing:4px;color:var(--gold);background:transparent;border:none;outline:none;text-align:center;width:auto;min-width:40px;cursor:text;text-shadow:0 0 40px rgba(245,200,66,.3);}
+.edit-ico{color:var(--muted);cursor:pointer;font-size:1rem;transition:color .2s;}
+.edit-ico:hover{color:var(--gold);}
+.meta{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:6px;}
+.meta span{display:flex;align-items:center;gap:5px;}
+
+/* CONNECTION */
+.conn-bar{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 18px;margin:0 auto 22px;width:fit-content;font-size:.8rem;color:var(--muted);}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .4s;}
+.conn-dot.online{background:var(--green);}
+.conn-dot.offline{background:var(--red);}
+
+/* TIMER */
+.timer-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 22px;margin-bottom:22px;display:flex;align-items:center;flex-wrap:wrap;gap:14px;}
+.timer-display{font-family:'Bebas Neue',sans-serif;font-size:3rem;letter-spacing:5px;color:var(--text);min-width:105px;transition:color .3s;}
+.timer-display.warn{color:var(--orange);}
+.timer-display.danger{color:var(--red);animation:blink .5s infinite alternate;}
+@keyframes blink{from{opacity:1}to{opacity:.3}}
+.t-presets{display:flex;gap:8px;flex-wrap:wrap;}
+.t-pre{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.8rem;font-family:'DM Sans',sans-serif;padding:6px 13px;border-radius:50px;cursor:pointer;transition:all .2s;}
+.t-pre:hover,.t-pre.on{background:var(--gold);color:#000;border-color:var(--gold);}
+.t-custom{display:flex;align-items:center;gap:6px;}
+.t-custom input{width:56px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:8px;font-size:.8rem;text-align:center;font-family:'DM Sans',sans-serif;outline:none;}
+.tico{width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;transition:transform .15s;}
+.tico:hover{transform:scale(1.1);}
+.t-play{background:var(--green);color:#000;}
+.t-pause{background:var(--gold);color:#000;}
+.t-rst{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
+.t-hide{margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);padding:6px 14px;border-radius:50px;font-size:.78rem;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;}
+.t-hide:hover{border-color:var(--gold);color:var(--gold);}
+
+/* COUNTDOWN OVERLAY */
+.cdown{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:2000;opacity:0;pointer-events:none;transition:opacity .25s;}
+.cdown.show{opacity:1;pointer-events:all;}
+.cdown-num{font-family:'Bebas Neue',sans-serif;font-size:22vw;color:var(--gold);}
+@keyframes cPop{0%{transform:scale(2);opacity:0}25%{transform:scale(1);opacity:1}75%{transform:scale(1);opacity:1}100%{transform:scale(.5);opacity:0}}
+
+/* TEAMS */
+#teams-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-bottom:22px;}
+.team-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:26px 18px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;position:relative;transition:border-color .3s,box-shadow .3s,transform .2s;}
+.team-box:hover{transform:translateY(-2px);}
+.team-box.leader{border-color:var(--gold);box-shadow:0 0 50px rgba(245,200,66,.15),inset 0 0 30px rgba(245,200,66,.04);}
+.leader-crown{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.68rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:3px 14px;border-radius:50px;white-space:nowrap;opacity:0;transition:opacity .3s;}
+.team-box.leader .leader-crown{opacity:1;}
+.color-strip{position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--r) var(--r) 0 0;}
+.rm-team{position:absolute;top:14px;right:14px;background:none;border:1px solid var(--border2);color:var(--muted);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.9rem;transition:all .2s;}
+.rm-team:hover{background:var(--red);border-color:var(--red);color:#fff;}
+.team-name{background:transparent;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.25rem;text-align:center;width:82%;outline:none;padding-bottom:5px;transition:border-color .2s;}
+.team-name:focus{border-bottom-color:var(--gold);}
+.ctrls{display:flex;align-items:center;justify-content:space-between;width:100%;}
+.score-num{font-family:'Bebas Neue',sans-serif;font-size:5.5rem;line-height:1;color:var(--text);flex:1;text-align:center;}
+.score-num.pop{animation:sPop .18s ease-out;}
+@keyframes sPop{0%{transform:scale(1.3)}100%{transform:scale(1)}}
+.bscore{width:66px;height:66px;border-radius:50%;border:none;font-size:1.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .2s;}
+.bscore:active{transform:scale(.86);}
+.bminus{background:rgba(240,80,77,.12);color:var(--red);border:1.5px solid var(--red);}
+.bminus:hover{background:var(--red);color:#fff;}
+.bplus{background:rgba(52,217,123,.12);color:var(--green);border:1.5px solid var(--green);}
+.bplus:hover{background:var(--green);color:#000;}
+.steps{display:flex;gap:6px;justify-content:center;}
+.step{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.74rem;padding:4px 10px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.step:hover,.step.on{background:var(--gold);color:#000;border-color:var(--gold);}
+
+/* ACTION BAR */
+.action-bar{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:24px;}
+.btn-a{padding:12px 22px;border:none;border-radius:50px;cursor:pointer;font-size:.9rem;font-weight:600;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:7px;transition:all .2s;}
+.btn-a:hover{transform:translateY(-2px);filter:brightness(1.12);}
+.b-add{background:var(--gold);color:#000;}
+.b-save{background:var(--green);color:#000;}
+.b-reset{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
+.b-qr{background:var(--blue);color:#fff;}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:24px;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;}
+.stat-l{font-size:.68rem;text-transform:uppercase;letter-spacing:1.8px;color:var(--muted);margin-bottom:4px;}
+.stat-v{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:1px;}
+
+/* QR MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:1500;opacity:0;pointer-events:none;transition:opacity .3s;}
+.modal-bg.show{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:24px;padding:32px 28px;text-align:center;max-width:340px;width:90%;}
+.modal h2{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:2px;color:var(--gold);margin-bottom:6px;}
+.modal p{font-size:.82rem;color:var(--muted);margin-bottom:20px;}
+#qr-box{display:flex;justify-content:center;margin-bottom:18px;}
+#qr-box canvas,#qr-box img{border-radius:12px;}
+.qr-url{font-size:.72rem;color:var(--muted);word-break:break-all;margin-bottom:18px;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);}
+.modal-close{background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 28px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.9rem;transition:all .2s;}
+.modal-close:hover{background:var(--red);border-color:var(--red);}
+
+/* HISTORY */
+.section-hd{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:2px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:12px;}
+.section-hd::after{content:'';flex:1;height:1px;background:var(--border);}
+.hist-list{display:flex;flex-direction:column;gap:10px;}
+.hist-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:all .2s;}
+.hist-card:hover{border-color:var(--border2);transform:translateX(4px);}
+.hist-date{font-size:.76rem;color:var(--muted);min-width:120px;}
+.hist-name{font-weight:700;font-size:.95rem;color:var(--gold);flex:1;min-width:100px;}
+.hist-chips{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{background:var(--surface2);border:1px solid var(--border2);border-radius:50px;padding:3px 12px;font-size:.78rem;font-weight:600;white-space:nowrap;}
+.chip.win{background:rgba(245,200,66,.12);border-color:var(--gold);color:var(--gold);}
+.hist-restore{background:none;border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:50px;font-size:.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .2s;}
+.hist-restore:hover{border-color:var(--gold);color:var(--gold);}
+.hist-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem;padding:4px;transition:color .2s;}
+.hist-del:hover{color:var(--red);}
+.empty{color:var(--muted);text-align:center;padding:28px;font-size:.85rem;}
+
+/* TOAST */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(90px);background:var(--green);color:#000;font-weight:700;padding:11px 24px;border-radius:50px;font-size:.88rem;z-index:3000;transition:transform .3s;pointer-events:none;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+/* ERROR BANNER */
+.err-banner{background:rgba(240,80,77,.15);border:1px solid var(--red);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:.85rem;color:#f9b0af;display:none;}
+.err-banner.show{display:block;}
+
+@media(max-width:480px){.timer-panel{flex-direction:column;align-items:flex-start;}.t-hide{margin-left:0;}}
+</style>
 </head>
-
 <body>
 
-    <div class="cdown" id="cdown">
-        <div class="cdown-num" id="cdown-num">3</div>
+<div class="cdown" id="cdown"><div class="cdown-num" id="cdown-num">3</div></div>
+
+<div class="modal-bg" id="qr-modal">
+  <div class="modal">
+    <h2>&#128242; Join Live</h2>
+    <p>Scan to view &amp; control the scoreboard on any device</p>
+    <div id="qr-box"></div>
+    <div class="qr-url" id="qr-url-text"></div>
+    <button class="modal-close" onclick="closeQR()">Close</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="wrap">
+  <div class="err-banner" id="err-banner"></div>
+
+  <div class="header">
+    <div class="title-row">
+      <input id="game-title" value="Score Board" size="12" oninput="autoSize(this);syncTitle()" title="Click to rename">
+      <span class="edit-ico" onclick="document.getElementById('game-title').focus()">&#9998;</span>
     </div>
-
-    <div class="modal-bg" id="qr-modal">
-        <div class="modal">
-            <h2>&#128242; Join Live</h2>
-            <p>Scan to view &amp; control the scoreboard on any device</p>
-            <div id="qr-box"></div>
-            <div class="qr-url" id="qr-url-text"></div>
-            <button class="modal-close" onclick="closeQR()">Close</button>
-        </div>
+    <div class="meta">
+      <span>&#128197; <span id="date-disp"></span></span>
+      <span>&#128336; <span id="time-disp"></span></span>
+      <span id="round-disp">&#127918; Round 1</span>
     </div>
+  </div>
 
-    <div class="toast" id="toast"></div>
+  <div class="conn-bar">
+    <div class="conn-dot" id="conn-dot"></div>
+    <span id="conn-text">Connecting&hellip;</span>
+  </div>
 
-    <div class="wrap">
-        <div class="err-banner" id="err-banner"></div>
-
-        <div class="header">
-            <div class="live-pill">
-                <div class="live-dot"></div>LIVE &middot; FIREBASE SYNC
-            </div>
-            <div class="title-row">
-                <input id="game-title" value="Score Board" size="12" oninput="autoSize(this);syncTitle()"
-                    title="Click to rename">
-                <span class="edit-ico" onclick="document.getElementById('game-title').focus()">&#9998;</span>
-            </div>
-            <div class="meta">
-                <span>&#128197; <span id="date-disp"></span></span>
-                <span>&#128336; <span id="time-disp"></span></span>
-                <span id="round-disp">&#127918; Round 1</span>
-            </div>
-        </div>
-
-        <div class="conn-bar">
-            <div class="conn-dot" id="conn-dot"></div>
-            <span id="conn-text">Connecting to Firebase&hellip;</span>
-        </div>
-
-        <div class="timer-panel" id="timer-panel">
-            <div class="timer-display" id="timer-disp">00:00</div>
-            <div class="t-presets">
-                <div class="t-pre on" onclick="setPreset(1,this)">1 min</div>
-                <div class="t-pre" onclick="setPreset(2,this)">2 min</div>
-                <div class="t-pre" onclick="setPreset(3,this)">3 min</div>
-                <div class="t-pre" onclick="setPreset(5,this)">5 min</div>
-                <div class="t-pre" onclick="setPreset(10,this)">10 min</div>
-                <div class="t-custom">
-                    <input type="number" id="t-custom-inp" placeholder="mm" min="1" max="99" oninput="setCustomTimer()">
-                    <span style="color:var(--muted);font-size:.8rem">min</span>
-                </div>
-            </div>
-            <button class="tico t-play" id="t-play" onclick="startTimer()" title="Start">&#9654;</button>
-            <button class="tico t-pause" id="t-pause" onclick="pauseTimer()" title="Pause"
-                style="display:none">&#9646;&#9646;</button>
-            <button class="tico t-rst" onclick="resetTimer()" title="Reset">&#8635;</button>
-            <button class="t-hide" onclick="toggleTimer()">Hide Timer</button>
-        </div>
-
-        <div id="teams-grid"></div>
-
-        <div class="action-bar">
-            <button class="btn-a b-add" onclick="addTeamUI()">+ Add Team</button>
-            <button class="btn-a b-save" onclick="saveGame()">&#128190; Save Game</button>
-            <button class="btn-a b-reset" onclick="resetAll()">&#8635; Reset Scores</button>
-            <button class="btn-a b-qr" onclick="openQR()">&#128242; Share QR</button>
-            <button class="btn-a b-export" onclick="exportJSON()">&#8595; Export</button>
-        </div>
-
-        <div class="stats" id="stats"></div>
-
-        <div class="section-hd">Game History</div>
-        <div class="hist-list" id="hist-list"></div>
+  <div class="timer-panel" id="timer-panel">
+    <div class="timer-display" id="timer-disp">00:00</div>
+    <div class="t-presets">
+      <div class="t-pre on" onclick="setPreset(1,this)">1 min</div>
+      <div class="t-pre" onclick="setPreset(2,this)">2 min</div>
+      <div class="t-pre" onclick="setPreset(3,this)">3 min</div>
+      <div class="t-pre" onclick="setPreset(5,this)">5 min</div>
+      <div class="t-pre" onclick="setPreset(10,this)">10 min</div>
+      <div class="t-custom">
+        <input type="number" id="t-custom-inp" placeholder="mm" min="1" max="99" oninput="setCustomTimer()">
+        <span style="color:var(--muted);font-size:.8rem">min</span>
+      </div>
     </div>
+    <button class="tico t-play"  id="t-play"  onclick="startTimer()" title="Start">&#9654;</button>
+    <button class="tico t-pause" id="t-pause" onclick="pauseTimer()" title="Pause" style="display:none">&#9646;&#9646;</button>
+    <button class="tico t-rst"                onclick="resetTimer()"  title="Reset">&#8635;</button>
+    <button class="t-hide" onclick="toggleTimer()">Hide Timer</button>
+  </div>
 
-    <!-- Firebase v9 modular SDK via CDN -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-        import {
-            getDatabase, ref, set, update,
-            onValue, get
-        } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+  <div id="teams-grid"></div>
 
-        // ── CONFIG ──────────────────────────────────────────
-        const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const ROOT = 'scoreboard';
+  <div class="action-bar">
+    <button class="btn-a b-add"   onclick="addTeamUI()">+ Add Team</button>
+    <button class="btn-a b-save"  onclick="saveGame()">&#128190; Save Game</button>
+    <button class="btn-a b-reset" onclick="resetAll()">&#8635; Reset Scores</button>
+    <button class="btn-a b-qr"    onclick="openQR()">&#128242; Share QR</button>
+  </div>
 
-        // ── STATE ────────────────────────────────────────────
-        const COLORS = ['#f5c842', '#34d97b', '#f07844', '#4f8ef7', '#a78bfa', '#f0504d', '#22d3ee'];
-        let localTeams = [];
-        let history = [];
-        let roundNum = 1;
-        let timerSecs = 60;
-        let timerLeft = 60;
-        let timerOn = false;
-        let timerInt = null;
-        let timerHide = false;
-        let cdBusy = false;
-        let teamCtr = 0;
-        let ignoreRemote = false;
-        let qrGenerated = false;
+  <div class="stats" id="stats"></div>
 
-        // ── INIT ─────────────────────────────────────────────
-        updateClock();
-        setInterval(updateClock, 1000);
-        renderTimer();
-        autoSize(document.getElementById('game-title'));
-        setupFirebase();
+  <div class="section-hd">Game History</div>
+  <div class="hist-list" id="hist-list"></div>
+</div>
 
-        // ── FIREBASE ─────────────────────────────────────────
-        function setupFirebase() {
-            // Connection monitor
-            onValue(ref(db, '.info/connected'), snap => {
-                const on = snap.val();
-                document.getElementById('conn-dot').className = 'conn-dot ' + (on ? 'online' : 'offline');
-                document.getElementById('conn-text').textContent = on
-                    ? 'Live — all changes sync to every device instantly'
-                    : 'Offline — reconnecting…';
-            });
+<script type="module">
+import { initializeApp }           from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getDatabase, ref, set,
+         update, onValue }         from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
-            // Main data listener
-            onValue(ref(db, ROOT), snap => {
-                if (ignoreRemote) return;
-                const data = snap.val();
-                if (!data) { pushDefaults(); return; }
-                applyRemoteState(data);
-            }, err => {
-                showError('Firebase error: ' + err.message + ' — check your database rules are set to test mode.');
-            });
-        }
+// ══ FIREBASE ══════════════════════════════════════════
+const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+const ROOT = 'scoreboard';
 
-        function pushDefaults() {
-            localTeams = [
-                { id: 1, name: 'Team 1', score: 0, color: COLORS[0] },
-                { id: 2, name: 'Team 2', score: 0, color: COLORS[1] }
-            ];
-            teamCtr = 2;
-            set(ref(db, ROOT), { title: 'Score Board', round: 1, teams: localTeams, history: [] });
-        }
+// ══ AUDIO ═════════════════════════════════════════════
+// All sounds generated via Web Audio API — no external files needed, works offline too
+let audioCtx = null;
 
-        function applyRemoteState(data) {
-            if (data.title !== undefined) {
-                const el = document.getElementById('game-title');
-                if (el.value !== data.title) { el.value = data.title; autoSize(el); }
-            }
-            if (data.round !== undefined) {
-                roundNum = data.round;
-                document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
-            }
-            if (data.teams) {
-                localTeams = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
-                teamCtr = Math.max(...localTeams.map(t => t.id), teamCtr);
-                renderTeams();
-            }
-            if (data.history) {
-                history = Array.isArray(data.history) ? data.history : Object.values(data.history);
-                renderHistory();
-            }
-            updateStats();
-        }
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
 
-        function pushRemote(partial) {
-            ignoreRemote = true;
-            update(ref(db, ROOT), partial).finally(() => {
-                setTimeout(() => { ignoreRemote = false; }, 400);
-            });
-        }
-        function pushTeams() { pushRemote({ teams: localTeams }); }
-        function pushAll() {
-            pushRemote({
-                title: document.getElementById('game-title').value,
-                round: roundNum,
-                teams: localTeams,
-                history: history
-            });
-        }
+// Bright ding for score change
+function playDing(isAdd = true) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    // Higher pitch for add, lower for subtract
+    osc.frequency.setValueAtTime(isAdd ? 880 : 440, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(isAdd ? 1320 : 330, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.35);
+  } catch(e) {}
+}
 
-        // ── TITLE ────────────────────────────────────────────
-        let titleDB;
-        function syncTitle() {
-            clearTimeout(titleDB);
-            titleDB = setTimeout(() => pushRemote({ title: document.getElementById('game-title').value }), 600);
-        }
-        window.syncTitle = syncTitle;
+// Urgent beep for countdown 3-2-1
+function playBeep(freq = 880) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.25);
+  } catch(e) {}
+}
 
-        // ── RENDER TEAMS ─────────────────────────────────────
-        function renderTeams() {
-            const grid = document.getElementById('teams-grid');
-            // preserve step selections
-            const stepMap = {};
-            grid.querySelectorAll('.team-box').forEach(b => {
-                const s = b.querySelector('.step.on');
-                if (s) stepMap[b.dataset.id] = parseInt(s.textContent.replace('±', ''));
-            });
-            grid.innerHTML = '';
-            const maxScore = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
-            localTeams.forEach((team, idx) => {
-                const lead = team.score === maxScore
-                    && localTeams.filter(t => t.score === maxScore).length === 1
-                    && maxScore > 0;
-                const col = team.color || COLORS[idx % COLORS.length];
-                const step = stepMap[String(team.id)] || 1;
-                const box = document.createElement('div');
-                box.className = 'team-box' + (lead ? ' leader' : '');
-                box.dataset.id = team.id;
-                box.innerHTML = `
+// Fanfare / alarm when timer hits 0
+function playAlarm() {
+  try {
+    const ctx = getAudioCtx();
+    const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
+    notes.forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      const t = ctx.currentTime + i * 0.18;
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.start(t);
+      osc.stop(t + 0.35);
+    });
+  } catch(e) {}
+}
+
+// ══ STATE ═════════════════════════════════════════════
+const COLORS = ['#f5c842','#34d97b','#f07844','#4f8ef7','#a78bfa','#f0504d','#22d3ee'];
+let localTeams    = [];
+let history       = [];
+let roundNum      = 1;
+let timerSecs     = 60;
+let timerLeft     = 60;
+let timerOn       = false;
+let timerInt      = null;
+let timerHide     = false;
+let cdBusy        = false;
+let teamCtr       = 0;
+let ignoreRemote  = false;
+let qrGenerated   = false;
+// For synced timer: track server start timestamp
+let timerStartedAt    = null; // server ms timestamp when timer started
+let timerPausedLeft   = null; // ms remaining when paused
+let lastSyncedSeconds = -1;   // avoid re-rendering same value
+
+// ══ INIT ══════════════════════════════════════════════
+updateClock();
+setInterval(updateClock, 1000);
+renderTimerDisplay(timerSecs);
+autoSize(document.getElementById('game-title'));
+setupFirebase();
+
+// ══ FIREBASE SETUP ════════════════════════════════════
+function setupFirebase() {
+  onValue(ref(db, '.info/connected'), snap => {
+    const on = snap.val();
+    document.getElementById('conn-dot').className = 'conn-dot ' + (on ? 'online' : 'offline');
+    document.getElementById('conn-text').textContent = on ? 'Connected' : 'Offline — reconnecting…';
+  });
+
+  onValue(ref(db, ROOT), snap => {
+    if (ignoreRemote) return;
+    const data = snap.val();
+    if (!data) { pushDefaults(); return; }
+    applyRemoteState(data);
+  }, err => {
+    showError('Firebase error: ' + err.message);
+  });
+}
+
+function pushDefaults() {
+  localTeams = [
+    { id:1, name:'Team 1', score:0, color:COLORS[0] },
+    { id:2, name:'Team 2', score:0, color:COLORS[1] }
+  ];
+  teamCtr = 2;
+  set(ref(db, ROOT), {
+    title: 'Score Board', round: 1,
+    teams: localTeams, history: [],
+    timer: { secs: 60, startedAt: null, pausedLeft: 60000, running: false }
+  });
+}
+
+function applyRemoteState(data) {
+  // Title
+  if (data.title !== undefined) {
+    const el = document.getElementById('game-title');
+    if (el.value !== data.title) { el.value = data.title; autoSize(el); }
+  }
+  // Round
+  if (data.round !== undefined) {
+    roundNum = data.round;
+    document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+  }
+  // Teams
+  if (data.teams) {
+    localTeams = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
+    teamCtr = Math.max(...localTeams.map(t => t.id), teamCtr);
+    renderTeams();
+  }
+  // History
+  if (data.history) {
+    history = Array.isArray(data.history) ? data.history : Object.values(data.history);
+    renderHistory();
+  }
+  // Timer sync
+  if (data.timer) {
+    syncTimerFromRemote(data.timer);
+  }
+  updateStats();
+}
+
+// ══ TIMER SYNC ════════════════════════════════════════
+// Timer state stored in Firebase:
+//   timer.secs       — total seconds for this round
+//   timer.running    — boolean
+//   timer.startedAt  — server ms timestamp when last started
+//   timer.pausedLeft — ms remaining when paused (used when running=false)
+
+function syncTimerFromRemote(t) {
+  timerSecs = t.secs || 60;
+
+  if (t.running && t.startedAt) {
+    // Calculate how much time is left based on server start time
+    const elapsed = Date.now() - t.startedAt;
+    const leftMs  = Math.max(0, (t.pausedLeft || timerSecs * 1000) - elapsed);
+    timerLeft  = Math.round(leftMs / 1000);
+    timerOn    = true;
+    timerStartedAt  = t.startedAt;
+    timerPausedLeft = t.pausedLeft;
+    // Start local tick if not already running
+    if (!timerInt) startLocalTick();
+    // Update play/pause buttons
+    document.getElementById('t-play').style.display  = 'none';
+    document.getElementById('t-pause').style.display = 'flex';
+  } else {
+    // Paused or stopped
+    const leftMs = t.pausedLeft !== undefined ? t.pausedLeft : timerSecs * 1000;
+    timerLeft = Math.round(leftMs / 1000);
+    timerOn   = false;
+    timerStartedAt  = null;
+    timerPausedLeft = leftMs;
+    stopLocalTick();
+    document.getElementById('t-play').style.display  = 'flex';
+    document.getElementById('t-pause').style.display = 'none';
+    renderTimerDisplay(timerLeft);
+  }
+}
+
+function startLocalTick() {
+  stopLocalTick();
+  timerInt = setInterval(() => {
+    // Always recompute from server start time for accuracy
+    const elapsed = timerStartedAt ? Date.now() - timerStartedAt : 0;
+    const leftMs  = Math.max(0, (timerPausedLeft || timerSecs * 1000) - elapsed);
+    const secs    = Math.round(leftMs / 1000);
+
+    if (secs !== lastSyncedSeconds) {
+      lastSyncedSeconds = secs;
+      timerLeft = secs;
+      renderTimerDisplay(secs);
+
+      // Countdown beeps at 3, 2, 1
+      if (secs <= 3 && secs > 0) {
+        playBeep(secs === 1 ? 1200 : secs === 2 ? 1000 : 800);
+        if (!cdBusy) showCountdown(secs);
+      }
+      if (secs <= 0) {
+        stopLocalTick();
+        timerOn = false;
+        document.getElementById('t-play').style.display  = 'flex';
+        document.getElementById('t-pause').style.display = 'none';
+        playAlarm();
+        showCountdown(0);
+      }
+    }
+  }, 250); // poll every 250ms for precision
+}
+
+function stopLocalTick() {
+  if (timerInt) { clearInterval(timerInt); timerInt = null; }
+}
+
+function renderTimerDisplay(secs) {
+  const m  = String(Math.floor(secs / 60)).padStart(2, '0');
+  const s  = String(secs % 60).padStart(2, '0');
+  const el = document.getElementById('timer-disp');
+  el.textContent = m + ':' + s;
+  el.className = 'timer-display';
+  if (secs <= 10 && secs > 3) el.classList.add('warn');
+  if (secs <= 3 && secs > 0)  el.classList.add('danger');
+}
+
+function pushTimerState(running) {
+  const pausedLeft = running
+    ? (timerPausedLeft !== null ? timerPausedLeft : timerSecs * 1000)
+    : timerLeft * 1000;
+  const startedAt = running ? Date.now() : null;
+
+  timerStartedAt  = startedAt;
+  timerPausedLeft = pausedLeft;
+
+  pushRemote({
+    timer: {
+      secs:       timerSecs,
+      running:    running,
+      startedAt:  startedAt,
+      pausedLeft: pausedLeft
+    }
+  });
+}
+
+function setPreset(mins, el) {
+  document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
+  if (el) el.classList.add('on');
+  timerSecs       = mins * 60;
+  timerLeft       = timerSecs;
+  timerPausedLeft = timerSecs * 1000;
+  stopLocalTick();
+  timerOn = false;
+  document.getElementById('t-play').style.display  = 'flex';
+  document.getElementById('t-pause').style.display = 'none';
+  renderTimerDisplay(timerLeft);
+  pushRemote({ timer: { secs: timerSecs, running: false, startedAt: null, pausedLeft: timerSecs * 1000 } });
+}
+window.setPreset = setPreset;
+
+function setCustomTimer() {
+  const v = parseInt(document.getElementById('t-custom-inp').value);
+  if (!v || v < 1) return;
+  document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
+  timerSecs       = v * 60;
+  timerLeft       = timerSecs;
+  timerPausedLeft = timerSecs * 1000;
+  stopLocalTick();
+  timerOn = false;
+  document.getElementById('t-play').style.display  = 'flex';
+  document.getElementById('t-pause').style.display = 'none';
+  renderTimerDisplay(timerLeft);
+  pushRemote({ timer: { secs: timerSecs, running: false, startedAt: null, pausedLeft: timerSecs * 1000 } });
+}
+window.setCustomTimer = setCustomTimer;
+
+function startTimer() {
+  if (timerOn) return;
+  if (timerLeft <= 0) {
+    timerLeft       = timerSecs;
+    timerPausedLeft = timerSecs * 1000;
+  }
+  timerOn = true;
+  document.getElementById('t-play').style.display  = 'none';
+  document.getElementById('t-pause').style.display = 'flex';
+  pushTimerState(true);
+  startLocalTick();
+}
+window.startTimer = startTimer;
+
+function pauseTimer() {
+  if (!timerOn) return;
+  timerOn = false;
+  stopLocalTick();
+  document.getElementById('t-play').style.display  = 'flex';
+  document.getElementById('t-pause').style.display = 'none';
+  pushTimerState(false);
+}
+window.pauseTimer = pauseTimer;
+
+function resetTimer() {
+  stopLocalTick();
+  timerOn         = false;
+  timerLeft       = timerSecs;
+  timerPausedLeft = timerSecs * 1000;
+  timerStartedAt  = null;
+  document.getElementById('t-play').style.display  = 'flex';
+  document.getElementById('t-pause').style.display = 'none';
+  renderTimerDisplay(timerLeft);
+  pushRemote({ timer: { secs: timerSecs, running: false, startedAt: null, pausedLeft: timerSecs * 1000 } });
+}
+window.resetTimer = resetTimer;
+
+function toggleTimer() {
+  timerHide = !timerHide;
+  const p = document.getElementById('timer-panel');
+  [...p.children].forEach(c => { if (!c.classList.contains('t-hide')) c.style.display = timerHide ? 'none' : ''; });
+  p.querySelector('.t-hide').textContent = timerHide ? 'Show Timer' : 'Hide Timer';
+  if (timerHide) pauseTimer();
+}
+window.toggleTimer = toggleTimer;
+
+function showCountdown(n) {
+  cdBusy = true;
+  const ov = document.getElementById('cdown');
+  const nm = document.getElementById('cdown-num');
+  nm.textContent = n === 0 ? '🏁' : n;
+  nm.style.animation = 'none'; void nm.offsetWidth;
+  nm.style.animation = 'cPop .85s ease-out forwards';
+  ov.classList.add('show');
+  setTimeout(() => { ov.classList.remove('show'); cdBusy = false; }, 900);
+}
+
+// ══ FIREBASE HELPERS ══════════════════════════════════
+function pushRemote(partial) {
+  ignoreRemote = true;
+  update(ref(db, ROOT), partial).finally(() => {
+    setTimeout(() => { ignoreRemote = false; }, 400);
+  });
+}
+function pushTeams() { pushRemote({ teams: localTeams }); }
+function pushAll() {
+  pushRemote({
+    title:   document.getElementById('game-title').value,
+    round:   roundNum,
+    teams:   localTeams,
+    history: history
+  });
+}
+
+// ══ TITLE ═════════════════════════════════════════════
+let titleDB;
+function syncTitle() {
+  clearTimeout(titleDB);
+  titleDB = setTimeout(() => pushRemote({ title: document.getElementById('game-title').value }), 600);
+}
+window.syncTitle = syncTitle;
+
+// ══ RENDER TEAMS ══════════════════════════════════════
+function renderTeams() {
+  const grid = document.getElementById('teams-grid');
+  const stepMap = {};
+  grid.querySelectorAll('.team-box').forEach(b => {
+    const s = b.querySelector('.step.on');
+    if (s) stepMap[b.dataset.id] = parseInt(s.dataset.step);
+  });
+  grid.innerHTML = '';
+  const maxScore = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
+  localTeams.forEach((team, idx) => {
+    const lead = team.score === maxScore
+               && localTeams.filter(t => t.score === maxScore).length === 1
+               && maxScore > 0;
+    const col  = team.color || COLORS[idx % COLORS.length];
+    const step = stepMap[String(team.id)] || 1;
+    const box  = document.createElement('div');
+    box.className  = 'team-box' + (lead ? ' leader' : '');
+    box.dataset.id = team.id;
+    box.innerHTML  = `
       <div class="leader-crown">&#127942; Leading</div>
       <div class="color-strip" style="background:${col}"></div>
       <button class="rm-team" data-id="${team.id}">&#215;</button>
-      <input type="text" class="team-name" value="${esc(team.name)}"
-             data-id="${team.id}" placeholder="Team Name">
+      <input type="text" class="team-name" value="${esc(team.name)}" data-id="${team.id}" placeholder="Team Name">
       <div class="ctrls">
         <button class="bscore bminus" data-id="${team.id}" data-dir="-1">&#8722;</button>
         <div class="score-num" id="sn-${team.id}">${team.score}</div>
         <button class="bscore bplus"  data-id="${team.id}" data-dir="1">+</button>
       </div>
       <div class="steps">
-        ${[1, 2, 5, 10].map(n =>
-                    `<button class="step${n === step ? ' on' : ''}" data-id="${team.id}" data-step="${n}">&plusmn;${n}</button>`
-                ).join('')}
+        ${[1,2,5,10].map(n =>
+          `<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}">&plusmn;${n}</button>`
+        ).join('')}
       </div>`;
-                grid.appendChild(box);
-            });
+    grid.appendChild(box);
+  });
 
-            // Event delegation — attach once to grid
-            grid.onclick = e => {
-                const rm = e.target.closest('.rm-team');
-                const bs = e.target.closest('.bscore');
-                const st = e.target.closest('.step');
-                if (rm) removeTeam(parseInt(rm.dataset.id));
-                if (bs) changeScore(parseInt(bs.dataset.id), parseInt(bs.dataset.dir));
-                if (st) setStep(st, parseInt(st.dataset.id), parseInt(st.dataset.step));
-            };
-            grid.onchange = e => {
-                const tn = e.target.closest('.team-name');
-                if (tn) updateTeamName(parseInt(tn.dataset.id), tn.value);
-            };
-        }
+  grid.onclick = e => {
+    const rm = e.target.closest('.rm-team');
+    const bs = e.target.closest('.bscore');
+    const st = e.target.closest('.step');
+    if (rm) removeTeam(parseInt(rm.dataset.id));
+    if (bs) changeScore(parseInt(bs.dataset.id), parseInt(bs.dataset.dir));
+    if (st) setStep(st, parseInt(st.dataset.id), parseInt(st.dataset.step));
+  };
+  grid.onchange = e => {
+    const tn = e.target.closest('.team-name');
+    if (tn) updateTeamName(parseInt(tn.dataset.id), tn.value);
+  };
+}
 
-        function getStep(teamId) {
-            const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
-            const s = box && box.querySelector('.step.on');
-            return s ? parseInt(s.dataset.step) : 1;
-        }
-        function esc(s) {
-            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
+function getStep(teamId) {
+  const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
+  const s   = box && box.querySelector('.step.on');
+  return s ? parseInt(s.dataset.step) : 1;
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-        // ── TEAM ACTIONS ─────────────────────────────────────
-        function addTeamUI() {
-            const id = ++teamCtr;
-            const col = COLORS[localTeams.length % COLORS.length];
-            localTeams.push({ id, name: 'Team ' + id, score: 0, color: col });
-            renderTeams(); pushTeams(); updateStats();
-        }
-        window.addTeamUI = addTeamUI;
+// ══ TEAM ACTIONS ══════════════════════════════════════
+function addTeamUI() {
+  const id  = ++teamCtr;
+  const col = COLORS[localTeams.length % COLORS.length];
+  localTeams.push({ id, name: 'Team ' + id, score: 0, color: col });
+  renderTeams(); pushTeams(); updateStats();
+}
+window.addTeamUI = addTeamUI;
 
-        function removeTeam(id) {
-            if (localTeams.length <= 1) return;
-            localTeams = localTeams.filter(t => t.id !== id);
-            renderTeams(); pushTeams(); updateStats();
-        }
+function removeTeam(id) {
+  if (localTeams.length <= 1) return;
+  localTeams = localTeams.filter(t => t.id !== id);
+  renderTeams(); pushTeams(); updateStats();
+}
 
-        function updateTeamName(id, val) {
-            const t = localTeams.find(t => t.id === id);
-            if (t) { t.name = val; pushTeams(); }
-        }
+function updateTeamName(id, val) {
+  const t = localTeams.find(t => t.id === id);
+  if (t) { t.name = val; pushTeams(); }
+}
 
-        function changeScore(id, dir) {
-            const step = getStep(id);
-            const t = localTeams.find(t => t.id === id);
-            if (!t) return;
-            t.score += dir * step;
-            const el = document.getElementById('sn-' + id);
-            if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent = t.score; }
-            renderLeaders(); pushTeams(); updateStats();
-        }
+function changeScore(id, dir) {
+  const step = getStep(id);
+  const t    = localTeams.find(t => t.id === id);
+  if (!t) return;
+  t.score += dir * step;
+  const el = document.getElementById('sn-' + id);
+  if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent = t.score; }
+  // 🔔 Play ding on every score change
+  playDing(dir > 0);
+  renderLeaders(); pushTeams(); updateStats();
+}
 
-        function renderLeaders() {
-            const max = Math.max(...localTeams.map(t => t.score));
-            document.querySelectorAll('.team-box').forEach(box => {
-                const t = localTeams.find(x => x.id == box.dataset.id);
-                if (!t) return;
-                const lead = t.score === max && localTeams.filter(x => x.score === max).length === 1 && max > 0;
-                box.classList.toggle('leader', lead);
-            });
-        }
+function renderLeaders() {
+  const max = Math.max(...localTeams.map(t => t.score));
+  document.querySelectorAll('.team-box').forEach(box => {
+    const t    = localTeams.find(x => x.id == box.dataset.id);
+    if (!t) return;
+    const lead = t.score === max && localTeams.filter(x => x.score === max).length === 1 && max > 0;
+    box.classList.toggle('leader', lead);
+  });
+}
 
-        function setStep(btn, teamId, n) {
-            const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
-            if (!box) return;
-            box.querySelectorAll('.step').forEach(b => b.classList.remove('on'));
-            btn.classList.add('on');
-        }
+function setStep(btn, teamId, n) {
+  const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
+  if (!box) return;
+  box.querySelectorAll('.step').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
 
-        function resetAll() {
-            if (!confirm('Reset all scores to 0?')) return;
-            localTeams.forEach(t => t.score = 0);
-            roundNum++;
-            document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
-            renderTeams(); pushAll(); updateStats();
-            showToast('Round ' + roundNum + ' begins! 🎮');
-        }
-        window.resetAll = resetAll;
+function resetAll() {
+  if (!confirm('Reset all scores to 0?')) return;
+  localTeams.forEach(t => t.score = 0);
+  roundNum++;
+  document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+  renderTeams(); pushAll(); updateStats();
+  showToast('Round ' + roundNum + ' begins! 🎮');
+}
+window.resetAll = resetAll;
 
-        // ── SAVE GAME ────────────────────────────────────────
-        function saveGame() {
-            const entry = {
-                id: Date.now(),
-                game: document.getElementById('game-title').value || 'Score Board',
-                date: new Date().toLocaleString(),
-                round: roundNum,
-                teams: localTeams.map(t => ({ ...t }))
-            };
-            history.unshift(entry);
-            if (history.length > 60) history = history.slice(0, 60);
-            pushAll(); renderHistory(); updateStats();
-            showToast('Game saved! 💾');
-        }
-        window.saveGame = saveGame;
+// ══ SAVE GAME ═════════════════════════════════════════
+function saveGame() {
+  const entry = {
+    id:    Date.now(),
+    game:  document.getElementById('game-title').value || 'Score Board',
+    date:  new Date().toLocaleString(),
+    round: roundNum,
+    teams: localTeams.map(t => ({...t}))
+  };
+  history.unshift(entry);
+  if (history.length > 60) history = history.slice(0, 60);
+  pushAll(); renderHistory(); updateStats();
+  showToast('Game saved! 💾');
+}
+window.saveGame = saveGame;
 
-        // ── HISTORY ──────────────────────────────────────────
-        function renderHistory() {
-            const el = document.getElementById('hist-list');
-            if (!history.length) {
-                el.innerHTML = '<div class="empty">No saved games yet — press Save Game after each round!</div>';
-                return;
-            }
-            el.innerHTML = history.map((e, i) => {
-                const max = Math.max(...e.teams.map(t => t.score));
-                const chips = e.teams.map(t => {
-                    const w = t.score === max && e.teams.filter(x => x.score === max).length === 1;
-                    return `<span class="chip${w ? ' win' : ''}" style="${w ? '' : 'border-left:3px solid ' + t.color}">${esc(t.name)}: ${t.score}</span>`;
-                }).join('');
-                return `<div class="hist-card">
+// ══ HISTORY ═══════════════════════════════════════════
+function renderHistory() {
+  const el = document.getElementById('hist-list');
+  if (!history.length) {
+    el.innerHTML = '<div class="empty">No saved games yet — press Save Game after each round!</div>';
+    return;
+  }
+  el.innerHTML = history.map((e, i) => {
+    const max   = Math.max(...e.teams.map(t => t.score));
+    const chips = e.teams.map(t => {
+      const w = t.score === max && e.teams.filter(x => x.score === max).length === 1;
+      return `<span class="chip${w ? ' win' : ''}" style="${w ? '' : 'border-left:3px solid ' + t.color}">${esc(t.name)}: ${t.score}</span>`;
+    }).join('');
+    return `<div class="hist-card">
       <div class="hist-date">${e.date}</div>
       <div style="flex:1">
         <div class="hist-name">${esc(e.game)} &middot; Round ${e.round}</div>
@@ -1256,174 +743,93 @@
       <button class="hist-restore" data-idx="${i}">&#8617; Restore</button>
       <button class="hist-del" data-idx="${i}">&#128465;</button>
     </div>`;
-            }).join('');
+  }).join('');
 
-            el.onclick = e => {
-                const r = e.target.closest('.hist-restore');
-                const d = e.target.closest('.hist-del');
-                if (r) restoreGame(parseInt(r.dataset.idx));
-                if (d) delHistory(parseInt(d.dataset.idx));
-            };
-        }
+  el.onclick = e => {
+    const r = e.target.closest('.hist-restore');
+    const d = e.target.closest('.hist-del');
+    if (r) restoreGame(parseInt(r.dataset.idx));
+    if (d) delHistory(parseInt(d.dataset.idx));
+  };
+}
 
-        function restoreGame(idx) {
-            const e = history[idx];
-            if (!confirm('Restore "' + e.game + '" Round ' + e.round + '?')) return;
-            document.getElementById('game-title').value = e.game;
-            autoSize(document.getElementById('game-title'));
-            localTeams = e.teams.map(t => ({ ...t }));
-            teamCtr = Math.max(...localTeams.map(t => t.id), teamCtr);
-            roundNum = e.round;
-            document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
-            renderTeams(); pushAll(); updateStats();
-            showToast('Restored! ↩');
-        }
+function restoreGame(idx) {
+  const e = history[idx];
+  if (!confirm('Restore "' + e.game + '" Round ' + e.round + '?')) return;
+  document.getElementById('game-title').value = e.game;
+  autoSize(document.getElementById('game-title'));
+  localTeams = e.teams.map(t => ({...t}));
+  teamCtr    = Math.max(...localTeams.map(t => t.id), teamCtr);
+  roundNum   = e.round;
+  document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+  renderTeams(); pushAll(); updateStats();
+  showToast('Restored! ↩');
+}
 
-        function delHistory(idx) {
-            history.splice(idx, 1);
-            pushRemote({ history }); renderHistory(); updateStats();
-        }
+function delHistory(idx) {
+  history.splice(idx, 1);
+  pushRemote({ history }); renderHistory(); updateStats();
+}
 
-        // ── STATS ────────────────────────────────────────────
-        function updateStats() {
-            const total = localTeams.reduce((a, t) => a + t.score, 0);
-            const sorted = [...localTeams].sort((a, b) => b.score - a.score);
-            const leader = sorted[0];
-            const gap = sorted.length > 1 ? sorted[0].score - sorted[1].score : 0;
-            document.getElementById('stats').innerHTML = `
+// ══ STATS ═════════════════════════════════════════════
+function updateStats() {
+  const total  = localTeams.reduce((a, t) => a + t.score, 0);
+  const sorted = [...localTeams].sort((a, b) => b.score - a.score);
+  const leader = sorted[0];
+  const gap    = sorted.length > 1 ? sorted[0].score - sorted[1].score : 0;
+  document.getElementById('stats').innerHTML = `
     <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${total}</div></div>
     <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:1rem;padding-top:6px">${leader ? esc(leader.name) : '—'}</div></div>
     <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${gap}</div></div>
     <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${history.length}</div></div>
     <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
   `;
-        }
+}
 
-        // ── QR ───────────────────────────────────────────────
-        function openQR() {
-            const url = window.location.href;
-            document.getElementById('qr-url-text').textContent = url;
-            if (!qrGenerated) {
-                document.getElementById('qr-box').innerHTML = '';
-                new QRCode(document.getElementById('qr-box'), {
-                    text: url, width: 220, height: 220,
-                    colorDark: '#f5c842', colorLight: '#10131a',
-                    correctLevel: QRCode.CorrectLevel.H
-                });
-                qrGenerated = true;
-            }
-            document.getElementById('qr-modal').classList.add('show');
-        }
-        function closeQR() { document.getElementById('qr-modal').classList.remove('show'); }
-        window.openQR = openQR;
-        window.closeQR = closeQR;
-        document.getElementById('qr-modal').addEventListener('click', e => {
-            if (e.target === document.getElementById('qr-modal')) closeQR();
-        });
+// ══ QR ════════════════════════════════════════════════
+function openQR() {
+  const url = window.location.href;
+  document.getElementById('qr-url-text').textContent = url;
+  if (!qrGenerated) {
+    document.getElementById('qr-box').innerHTML = '';
+    new QRCode(document.getElementById('qr-box'), {
+      text: url, width: 220, height: 220,
+      colorDark: '#f5c842', colorLight: '#10131a',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    qrGenerated = true;
+  }
+  document.getElementById('qr-modal').classList.add('show');
+}
+function closeQR() { document.getElementById('qr-modal').classList.remove('show'); }
+window.openQR  = openQR;
+window.closeQR = closeQR;
+document.getElementById('qr-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('qr-modal')) closeQR();
+});
 
-        // ── TIMER ────────────────────────────────────────────
-        function setPreset(mins, el) {
-            document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
-            if (el) el.classList.add('on');
-            timerSecs = mins * 60; timerLeft = timerSecs;
-            if (!timerOn) renderTimer();
-        }
-        function setCustomTimer() {
-            const v = parseInt(document.getElementById('t-custom-inp').value);
-            if (!v || v < 1) return;
-            document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
-            timerSecs = v * 60; timerLeft = timerSecs;
-            if (!timerOn) renderTimer();
-        }
-        function renderTimer() {
-            const m = String(Math.floor(timerLeft / 60)).padStart(2, '0');
-            const s = String(timerLeft % 60).padStart(2, '0');
-            const el = document.getElementById('timer-disp');
-            el.textContent = m + ':' + s;
-            el.className = 'timer-display';
-            if (timerLeft <= 10 && timerLeft > 3) el.classList.add('warn');
-            if (timerLeft <= 3) el.classList.add('danger');
-        }
-        function startTimer() {
-            if (timerOn) return;
-            if (timerLeft <= 0) timerLeft = timerSecs;
-            timerOn = true;
-            document.getElementById('t-play').style.display = 'none';
-            document.getElementById('t-pause').style.display = 'flex';
-            timerInt = setInterval(() => {
-                timerLeft--; renderTimer();
-                if (timerLeft <= 3 && timerLeft > 0 && !cdBusy) showCountdown(timerLeft);
-                if (timerLeft <= 0) {
-                    clearInterval(timerInt); timerOn = false;
-                    document.getElementById('t-play').style.display = 'flex';
-                    document.getElementById('t-pause').style.display = 'none';
-                    showCountdown(0);
-                }
-            }, 1000);
-        }
-        function pauseTimer() {
-            clearInterval(timerInt); timerOn = false;
-            document.getElementById('t-play').style.display = 'flex';
-            document.getElementById('t-pause').style.display = 'none';
-        }
-        function resetTimer() { pauseTimer(); timerLeft = timerSecs; renderTimer(); }
-        function toggleTimer() {
-            timerHide = !timerHide;
-            const p = document.getElementById('timer-panel');
-            [...p.children].forEach(c => { if (!c.classList.contains('t-hide')) c.style.display = timerHide ? 'none' : ''; });
-            p.querySelector('.t-hide').textContent = timerHide ? 'Show Timer' : 'Hide Timer';
-            if (timerHide) pauseTimer();
-        }
-        function showCountdown(n) {
-            cdBusy = true;
-            const ov = document.getElementById('cdown');
-            const nm = document.getElementById('cdown-num');
-            nm.textContent = n === 0 ? '🏁' : n;
-            nm.style.animation = 'none'; void nm.offsetWidth;
-            nm.style.animation = 'cPop .85s ease-out forwards';
-            ov.classList.add('show');
-            setTimeout(() => { ov.classList.remove('show'); cdBusy = false; }, 900);
-        }
-        window.setPreset = setPreset;
-        window.setCustomTimer = setCustomTimer;
-        window.startTimer = startTimer;
-        window.pauseTimer = pauseTimer;
-        window.resetTimer = resetTimer;
-        window.toggleTimer = toggleTimer;
+// ══ CLOCK ═════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  document.getElementById('date-disp').textContent =
+    now.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  document.getElementById('time-disp').textContent =
+    now.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+}
 
-        // ── CLOCK ────────────────────────────────────────────
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('date-disp').textContent =
-                now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-            document.getElementById('time-disp').textContent =
-                now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-        }
+// ══ UTILS ═════════════════════════════════════════════
+function autoSize(el) { el.style.width = '10px'; el.style.width = (el.scrollWidth + 6) + 'px'; }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+function showError(msg) {
+  const b = document.getElementById('err-banner');
+  b.textContent = '⚠️ ' + msg; b.classList.add('show');
+}
+window.autoSize = autoSize;
 
-        // ── EXPORT ───────────────────────────────────────────
-        function exportJSON() {
-            const data = { exported: new Date().toISOString(), teams: localTeams, history };
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob); a.download = 'scoreboard-' + Date.now() + '.json'; a.click();
-            showToast('Exported!');
-        }
-        window.exportJSON = exportJSON;
-
-        // ── UTILS ────────────────────────────────────────────
-        function autoSize(el) { el.style.width = '10px'; el.style.width = (el.scrollWidth + 6) + 'px'; }
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.textContent = msg; t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2600);
-        }
-        function showError(msg) {
-            const b = document.getElementById('err-banner');
-            b.textContent = '⚠️ ' + msg; b.classList.add('show');
-        }
-        window.autoSize = autoSize;
-
-    </script>
+</script>
 </body>
-
 </html>
