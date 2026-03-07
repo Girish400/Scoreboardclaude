@@ -3,24 +3,29 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Score Board Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Score Board Live</title>
     <link
         href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
+    <!-- QR Code (plain script, no module needed) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
     <style>
         :root {
-            --bg: #0d0d0f;
-            --surface: #161619;
-            --surface2: #1e1e23;
-            --border: #2a2a32;
-            --accent: #f0c040;
-            --accent2: #e8834a;
-            --green: #3ecf8e;
-            --red: #f25f5c;
-            --text: #f0f0f5;
-            --muted: #6e6e82;
-            --radius: 18px;
+            --bg: #080a0f;
+            --surface: #10131a;
+            --surface2: #181c26;
+            --border: #1e2330;
+            --border2: #252c3d;
+            --gold: #f5c842;
+            --green: #34d97b;
+            --red: #f0504d;
+            --blue: #4f8ef7;
+            --orange: #f07844;
+            --text: #eef0f8;
+            --muted: #5a6180;
+            --r: 16px;
         }
 
         * {
@@ -29,422 +34,533 @@
             padding: 0;
         }
 
+        html,
         body {
             font-family: 'DM Sans', sans-serif;
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
-            padding: 24px 16px 60px;
+            overflow-x: hidden;
         }
 
-        /* ── HEADER ── */
-        .header {
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+            background-size: 60px 60px;
+            opacity: .35;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(245, 200, 66, .07), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .wrap {
+            position: relative;
+            z-index: 1;
             max-width: 1100px;
-            margin: 0 auto 32px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
+            margin: 0 auto;
+            padding: 24px 16px 80px;
         }
 
-        .game-title-wrap {
+        /* HEADER */
+        .header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(52, 217, 123, .1);
+            border: 1px solid rgba(52, 217, 123, .3);
+            color: var(--green);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 50px;
+            margin-bottom: 14px;
+        }
+
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: livePulse 1.4s infinite;
+        }
+
+        @keyframes livePulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1)
+            }
+
+            50% {
+                opacity: .4;
+                transform: scale(.7)
+            }
+        }
+
+        .title-row {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
+            margin-bottom: 8px;
         }
 
         #game-title {
             font-family: 'Bebas Neue', sans-serif;
-            font-size: clamp(2.8rem, 7vw, 5rem);
-            letter-spacing: 3px;
-            color: var(--accent);
+            font-size: clamp(2.6rem, 8vw, 4.8rem);
+            letter-spacing: 4px;
+            color: var(--gold);
             background: transparent;
             border: none;
             outline: none;
             text-align: center;
             width: auto;
-            min-width: 60px;
+            min-width: 40px;
             cursor: text;
+            text-shadow: 0 0 40px rgba(245, 200, 66, .3);
         }
 
-        .edit-icon {
+        .edit-ico {
             color: var(--muted);
-            font-size: 1rem;
             cursor: pointer;
+            font-size: 1rem;
             transition: color .2s;
         }
 
-        .edit-icon:hover {
-            color: var(--accent);
+        .edit-ico:hover {
+            color: var(--gold);
         }
 
-        .meta-row {
+        .meta {
             display: flex;
-            gap: 20px;
-            align-items: center;
-            font-size: .85rem;
-            color: var(--muted);
-            flex-wrap: wrap;
+            gap: 18px;
             justify-content: center;
+            flex-wrap: wrap;
+            font-size: .8rem;
+            color: var(--muted);
+            margin-top: 6px;
         }
 
-        .meta-row span {
+        .meta span {
             display: flex;
             align-items: center;
             gap: 5px;
         }
 
-        /* ── TIMER SECTION ── */
-        .timer-bar {
-            max-width: 1100px;
-            margin: 0 auto 28px;
+        /* CONNECTION */
+        .conn-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 18px 24px;
+            border-radius: 50px;
+            padding: 8px 18px;
+            margin: 0 auto 22px;
+            width: fit-content;
+            font-size: .8rem;
+            color: var(--muted);
+        }
+
+        .conn-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--muted);
+            transition: background .4s;
+        }
+
+        .conn-dot.online {
+            background: var(--green);
+        }
+
+        .conn-dot.offline {
+            background: var(--red);
+        }
+
+        /* TIMER */
+        .timer-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            padding: 18px 22px;
+            margin-bottom: 22px;
             display: flex;
             align-items: center;
             flex-wrap: wrap;
-            gap: 16px;
+            gap: 14px;
         }
 
         .timer-display {
             font-family: 'Bebas Neue', sans-serif;
-            font-size: 3.2rem;
-            letter-spacing: 4px;
+            font-size: 3rem;
+            letter-spacing: 5px;
             color: var(--text);
-            min-width: 110px;
+            min-width: 105px;
             transition: color .3s;
         }
 
-        .timer-display.warning {
-            color: var(--accent2);
+        .timer-display.warn {
+            color: var(--orange);
         }
 
         .timer-display.danger {
             color: var(--red);
-            animation: pulse .5s infinite alternate;
+            animation: blink .5s infinite alternate;
         }
 
-        @keyframes pulse {
+        @keyframes blink {
             from {
-                opacity: 1;
+                opacity: 1
             }
 
             to {
-                opacity: .5;
+                opacity: .3
             }
         }
 
-        .timer-controls {
+        .t-presets {
             display: flex;
-            gap: 10px;
-            align-items: center;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
-        .timer-preset {
+        .t-pre {
             background: var(--surface2);
-            border: 1px solid var(--border);
-            color: var(--text);
-            padding: 7px 14px;
+            border: 1px solid var(--border2);
+            color: var(--muted);
+            font-size: .8rem;
+            font-family: 'DM Sans', sans-serif;
+            padding: 6px 13px;
             border-radius: 50px;
-            font-size: .85rem;
             cursor: pointer;
             transition: all .2s;
-            font-family: 'DM Sans', sans-serif;
         }
 
-        .timer-preset:hover,
-        .timer-preset.active {
-            background: var(--accent);
+        .t-pre:hover,
+        .t-pre.on {
+            background: var(--gold);
             color: #000;
-            border-color: var(--accent);
+            border-color: var(--gold);
         }
 
-        .timer-custom {
+        .t-custom {
             display: flex;
             align-items: center;
             gap: 6px;
         }
 
-        .timer-custom input {
-            width: 60px;
+        .t-custom input {
+            width: 56px;
             background: var(--surface2);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
             color: var(--text);
-            padding: 7px 10px;
+            padding: 6px 8px;
             border-radius: 8px;
-            font-size: .85rem;
+            font-size: .8rem;
             text-align: center;
             font-family: 'DM Sans', sans-serif;
             outline: none;
         }
 
-        .btn-icon {
-            width: 42px;
-            height: 42px;
+        .tico {
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             border: none;
             cursor: pointer;
-            font-size: 1.1rem;
+            font-size: 1rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all .15s;
+            transition: transform .15s;
         }
 
-        .btn-icon:hover {
+        .tico:hover {
             transform: scale(1.1);
         }
 
-        .btn-start {
+        .t-play {
             background: var(--green);
             color: #000;
         }
 
-        .btn-pause {
-            background: var(--accent);
+        .t-pause {
+            background: var(--gold);
             color: #000;
         }
 
-        .btn-reset-t {
+        .t-rst {
             background: var(--surface2);
             color: var(--text);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
         }
 
-        .timer-toggle {
+        .t-hide {
             margin-left: auto;
             background: none;
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
             color: var(--muted);
             padding: 6px 14px;
             border-radius: 50px;
-            font-size: .8rem;
+            font-size: .78rem;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
             transition: all .2s;
         }
 
-        .timer-toggle:hover {
-            border-color: var(--accent);
-            color: var(--accent);
+        .t-hide:hover {
+            border-color: var(--gold);
+            color: var(--gold);
         }
 
-        .countdown-overlay {
+        /* COUNTDOWN */
+        .cdown {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, .85);
+            background: rgba(0, 0, 0, .88);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            z-index: 2000;
             opacity: 0;
             pointer-events: none;
-            transition: opacity .3s;
+            transition: opacity .25s;
         }
 
-        .countdown-overlay.show {
+        .cdown.show {
             opacity: 1;
             pointer-events: all;
         }
 
-        .countdown-number {
+        .cdown-num {
             font-family: 'Bebas Neue', sans-serif;
-            font-size: 20vw;
-            color: var(--accent);
-            animation: countPop .9s ease-out;
+            font-size: 22vw;
+            color: var(--gold);
         }
 
-        @keyframes countPop {
+        @keyframes cPop {
             0% {
-                transform: scale(1.8);
-                opacity: 0;
+                transform: scale(2);
+                opacity: 0
             }
 
-            30% {
+            25% {
                 transform: scale(1);
-                opacity: 1;
+                opacity: 1
             }
 
-            80% {
+            75% {
                 transform: scale(1);
-                opacity: 1;
+                opacity: 1
             }
 
             100% {
-                transform: scale(.6);
-                opacity: 0;
+                transform: scale(.5);
+                opacity: 0
             }
         }
 
-        /* ── TEAM GRID ── */
+        /* TEAMS */
         #teams-grid {
-            max-width: 1100px;
-            margin: 0 auto 28px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+            gap: 18px;
+            margin-bottom: 22px;
         }
 
         .team-box {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 28px 20px 24px;
+            border-radius: var(--r);
+            padding: 26px 18px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 16px;
+            gap: 14px;
             position: relative;
-            transition: border-color .3s, box-shadow .3s;
+            transition: border-color .3s, box-shadow .3s, transform .2s;
         }
 
         .team-box:hover {
-            border-color: #3a3a48;
-            box-shadow: 0 0 40px rgba(240, 192, 64, .04);
+            transform: translateY(-2px);
         }
 
         .team-box.leader {
-            border-color: var(--accent);
-            box-shadow: 0 0 40px rgba(240, 192, 64, .12);
+            border-color: var(--gold);
+            box-shadow: 0 0 50px rgba(245, 200, 66, .15), inset 0 0 30px rgba(245, 200, 66, .04);
         }
 
-        .leader-badge {
+        .leader-crown {
             position: absolute;
-            top: -12px;
+            top: -14px;
             left: 50%;
             transform: translateX(-50%);
-            background: var(--accent);
+            background: var(--gold);
             color: #000;
-            font-size: .7rem;
-            font-weight: 700;
+            font-size: .68rem;
+            font-weight: 800;
             letter-spacing: 1.5px;
             text-transform: uppercase;
-            padding: 3px 12px;
+            padding: 3px 14px;
             border-radius: 50px;
             white-space: nowrap;
             opacity: 0;
             transition: opacity .3s;
         }
 
-        .team-box.leader .leader-badge {
+        .team-box.leader .leader-crown {
             opacity: 1;
         }
 
-        .team-color-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
+        .color-strip {
             position: absolute;
-            top: 16px;
-            left: 18px;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: var(--r) var(--r) 0 0;
+        }
+
+        .rm-team {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: none;
+            border: 1px solid var(--border2);
+            color: var(--muted);
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: .9rem;
+            transition: all .2s;
+        }
+
+        .rm-team:hover {
+            background: var(--red);
+            border-color: var(--red);
+            color: #fff;
         }
 
         .team-name {
             background: transparent;
             border: none;
-            border-bottom: 2px solid var(--border);
+            border-bottom: 2px solid var(--border2);
             color: var(--text);
             font-family: 'DM Sans', sans-serif;
             font-weight: 700;
-            font-size: 1.3rem;
+            font-size: 1.25rem;
             text-align: center;
-            width: 80%;
+            width: 82%;
             outline: none;
-            padding-bottom: 6px;
+            padding-bottom: 5px;
             transition: border-color .2s;
         }
 
         .team-name:focus {
-            border-bottom-color: var(--accent);
+            border-bottom-color: var(--gold);
         }
 
-        .controls-wrapper {
+        .ctrls {
             display: flex;
             align-items: center;
             justify-content: space-between;
             width: 100%;
-            gap: 8px;
         }
 
-        .score-display {
+        .score-num {
             font-family: 'Bebas Neue', sans-serif;
             font-size: 5.5rem;
+            line-height: 1;
             color: var(--text);
             flex: 1;
             text-align: center;
-            transition: transform .1s;
-            line-height: 1;
         }
 
-        .score-display.bump {
-            animation: scoreBump .15s ease-out;
+        .score-num.pop {
+            animation: sPop .18s ease-out;
         }
 
-        @keyframes scoreBump {
+        @keyframes sPop {
             0% {
-                transform: scale(1.25);
+                transform: scale(1.3)
             }
 
             100% {
-                transform: scale(1);
+                transform: scale(1)
             }
         }
 
-        .btn-score {
-            width: 68px;
-            height: 68px;
+        .bscore {
+            width: 66px;
+            height: 66px;
             border-radius: 50%;
             border: none;
-            font-size: 2rem;
+            font-size: 1.9rem;
             font-weight: 700;
             cursor: pointer;
-            transition: transform .1s, box-shadow .1s;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: transform .1s, background .2s;
         }
 
-        .btn-score:active {
-            transform: scale(.88);
+        .bscore:active {
+            transform: scale(.86);
         }
 
-        .btn-minus {
-            background: rgba(242, 95, 92, .15);
+        .bminus {
+            background: rgba(240, 80, 77, .12);
             color: var(--red);
             border: 1.5px solid var(--red);
         }
 
-        .btn-minus:hover {
+        .bminus:hover {
             background: var(--red);
             color: #fff;
         }
 
-        .btn-plus {
-            background: rgba(62, 207, 142, .15);
+        .bplus {
+            background: rgba(52, 217, 123, .12);
             color: var(--green);
             border: 1.5px solid var(--green);
         }
 
-        .btn-plus:hover {
+        .bplus:hover {
             background: var(--green);
             color: #000;
         }
 
-        /* Step buttons */
-        .step-btns {
+        .steps {
             display: flex;
             gap: 6px;
             justify-content: center;
         }
 
-        .step-btn {
+        .step {
             background: var(--surface2);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
             color: var(--muted);
-            font-size: .75rem;
+            font-size: .74rem;
             padding: 4px 10px;
             border-radius: 50px;
             cursor: pointer;
@@ -452,261 +568,310 @@
             transition: all .15s;
         }
 
-        .step-btn:hover,
-        .step-btn.active-step {
-            background: var(--accent);
+        .step:hover,
+        .step.on {
+            background: var(--gold);
             color: #000;
-            border-color: var(--accent);
+            border-color: var(--gold);
         }
 
-        .remove-team {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--muted);
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 1rem;
-            line-height: 1;
-            transition: all .2s;
-        }
-
-        .remove-team:hover {
-            background: var(--red);
-            border-color: var(--red);
-            color: #fff;
-        }
-
-        /* ── ACTION BAR ── */
+        /* ACTION BAR */
         .action-bar {
-            max-width: 1100px;
-            margin: 0 auto 28px;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             justify-content: center;
             flex-wrap: wrap;
+            margin-bottom: 24px;
         }
 
-        .btn-action {
-            padding: 13px 26px;
+        .btn-a {
+            padding: 12px 22px;
             border: none;
             border-radius: 50px;
             cursor: pointer;
-            font-size: .95rem;
+            font-size: .9rem;
             font-weight: 600;
             font-family: 'DM Sans', sans-serif;
             display: flex;
             align-items: center;
             gap: 7px;
             transition: all .2s;
-            letter-spacing: .2px;
         }
 
-        .btn-action:hover {
+        .btn-a:hover {
             transform: translateY(-2px);
-            filter: brightness(1.1);
+            filter: brightness(1.12);
         }
 
-        .add-btn {
-            background: var(--accent);
+        .b-add {
+            background: var(--gold);
             color: #000;
         }
 
-        .save-btn {
+        .b-save {
             background: var(--green);
             color: #000;
         }
 
-        .reset-btn {
+        .b-reset {
             background: var(--surface2);
             color: var(--text);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
         }
 
-        .export-btn {
+        .b-qr {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .b-export {
             background: var(--surface2);
             color: var(--text);
+            border: 1px solid var(--border2);
+        }
+
+        /* STATS */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat {
+            background: var(--surface);
             border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px 16px;
         }
 
-        .import-btn {
-            background: var(--surface2);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-
-        /* ── HISTORY PANEL ── */
-        .history-section {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-
-        .section-title {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 1.5rem;
-            letter-spacing: 2px;
+        .stat-l {
+            font-size: .68rem;
+            text-transform: uppercase;
+            letter-spacing: 1.8px;
             color: var(--muted);
-            margin-bottom: 16px;
+            margin-bottom: 4px;
+        }
+
+        .stat-v {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 1px;
+        }
+
+        /* QR MODAL */
+        .modal-bg {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .8);
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: center;
+            z-index: 1500;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .3s;
         }
 
-        .section-title::after {
+        .modal-bg.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 24px;
+            padding: 32px 28px;
+            text-align: center;
+            max-width: 340px;
+            width: 90%;
+        }
+
+        .modal h2 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            color: var(--gold);
+            margin-bottom: 6px;
+        }
+
+        .modal p {
+            font-size: .82rem;
+            color: var(--muted);
+            margin-bottom: 20px;
+        }
+
+        #qr-box {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+
+        #qr-box canvas,
+        #qr-box img {
+            border-radius: 12px;
+        }
+
+        .qr-url {
+            font-size: .72rem;
+            color: var(--muted);
+            word-break: break-all;
+            margin-bottom: 18px;
+            padding: 8px 12px;
+            background: var(--surface2);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .modal-close {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            color: var(--text);
+            padding: 10px 28px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            font-size: .9rem;
+            transition: all .2s;
+        }
+
+        .modal-close:hover {
+            background: var(--red);
+            border-color: var(--red);
+        }
+
+        /* HISTORY */
+        .section-hd {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+            color: var(--muted);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-hd::after {
             content: '';
             flex: 1;
             height: 1px;
             background: var(--border);
         }
 
-        .history-list {
+        .hist-list {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
         }
 
-        .history-card {
+        .hist-card {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 16px 20px;
+            padding: 14px 18px;
             display: flex;
             align-items: center;
-            gap: 16px;
-            cursor: pointer;
+            gap: 14px;
+            flex-wrap: wrap;
             transition: all .2s;
         }
 
-        .history-card:hover {
-            border-color: #3a3a48;
-            background: var(--surface2);
+        .hist-card:hover {
+            border-color: var(--border2);
             transform: translateX(4px);
         }
 
-        .history-date {
-            font-size: .8rem;
+        .hist-date {
+            font-size: .76rem;
             color: var(--muted);
-            white-space: nowrap;
             min-width: 120px;
         }
 
-        .history-game {
+        .hist-name {
             font-weight: 700;
-            font-size: 1rem;
-            color: var(--accent);
+            font-size: .95rem;
+            color: var(--gold);
             flex: 1;
+            min-width: 100px;
         }
 
-        .history-scores {
+        .hist-chips {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
-        .history-score-chip {
+        .chip {
             background: var(--surface2);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
             border-radius: 50px;
             padding: 3px 12px;
-            font-size: .82rem;
+            font-size: .78rem;
             font-weight: 600;
             white-space: nowrap;
         }
 
-        .history-score-chip.winner {
-            background: rgba(240, 192, 64, .15);
-            border-color: var(--accent);
-            color: var(--accent);
+        .chip.win {
+            background: rgba(245, 200, 66, .12);
+            border-color: var(--gold);
+            color: var(--gold);
         }
 
-        .history-restore {
+        .hist-restore {
             background: none;
-            border: 1px solid var(--border);
+            border: 1px solid var(--border2);
             color: var(--muted);
             padding: 5px 12px;
             border-radius: 50px;
-            font-size: .78rem;
+            font-size: .75rem;
             cursor: pointer;
             font-family: 'DM Sans', sans-serif;
             white-space: nowrap;
             transition: all .2s;
         }
 
-        .history-restore:hover {
-            border-color: var(--accent);
-            color: var(--accent);
+        .hist-restore:hover {
+            border-color: var(--gold);
+            color: var(--gold);
         }
 
-        .history-del {
+        .hist-del {
             background: none;
             border: none;
             color: var(--muted);
             cursor: pointer;
-            font-size: 1rem;
+            font-size: .95rem;
             padding: 4px;
             transition: color .2s;
         }
 
-        .history-del:hover {
+        .hist-del:hover {
             color: var(--red);
         }
 
-        .empty-history {
+        .empty {
             color: var(--muted);
             text-align: center;
-            padding: 30px;
-            font-size: .9rem;
+            padding: 28px;
+            font-size: .85rem;
         }
 
-        /* ── STATS BAR ── */
-        .stats-bar {
-            max-width: 1100px;
-            margin: 0 auto 28px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-        }
-
-        .stat-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 14px 18px;
-        }
-
-        .stat-label {
-            font-size: .72rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--muted);
-            margin-bottom: 4px;
-        }
-
-        .stat-value {
-            font-family: 'Bebas Neue', sans-serif;
-            font-size: 1.8rem;
-            color: var(--text);
-            letter-spacing: 1px;
-        }
-
-        /* ── TOAST ── */
+        /* TOAST */
         .toast {
             position: fixed;
-            bottom: 30px;
+            bottom: 28px;
             left: 50%;
-            transform: translateX(-50%) translateY(80px);
+            transform: translateX(-50%) translateY(90px);
             background: var(--green);
             color: #000;
-            font-weight: 600;
-            padding: 12px 24px;
+            font-weight: 700;
+            padding: 11px 24px;
             border-radius: 50px;
-            font-size: .9rem;
-            z-index: 999;
-            transition: transform .3s ease;
+            font-size: .88rem;
+            z-index: 3000;
+            transition: transform .3s;
             pointer-events: none;
         }
 
@@ -714,35 +879,29 @@
             transform: translateX(-50%) translateY(0);
         }
 
-        /* ── SCROLLBAR ── */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 3px;
-        }
-
-        #import-file {
+        /* ERROR BANNER */
+        .err-banner {
+            background: rgba(240, 80, 77, .15);
+            border: 1px solid var(--red);
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-bottom: 20px;
+            font-size: .85rem;
+            color: #f9b0af;
             display: none;
         }
 
-        .team-colors {
-            display: none;
+        .err-banner.show {
+            display: block;
         }
 
-        @media(max-width: 500px) {
-            .timer-bar {
+        @media(max-width:480px) {
+            .timer-panel {
                 flex-direction: column;
                 align-items: flex-start;
             }
 
-            .timer-toggle {
+            .t-hide {
                 margin-left: 0;
             }
         }
@@ -751,427 +910,519 @@
 
 <body>
 
-    <!-- Countdown overlay -->
-    <div class="countdown-overlay" id="countdown-overlay">
-        <div class="countdown-number" id="countdown-number">3</div>
+    <div class="cdown" id="cdown">
+        <div class="cdown-num" id="cdown-num">3</div>
     </div>
 
-    <!-- Toast -->
-    <div class="toast" id="toast">Game saved!</div>
-
-    <div class="header">
-        <div class="game-title-wrap">
-            <input id="game-title" value="Score Board" size="12" oninput="autoSize(this)" title="Click to rename game">
-            <span class="edit-icon" onclick="document.getElementById('game-title').focus()" title="Edit title">✎</span>
-        </div>
-        <div class="meta-row">
-            <span>📅 <span id="date-display"></span></span>
-            <span>🕐 <span id="time-display"></span></span>
-            <span id="round-display">🎮 Round 1</span>
+    <div class="modal-bg" id="qr-modal">
+        <div class="modal">
+            <h2>&#128242; Join Live</h2>
+            <p>Scan to view &amp; control the scoreboard on any device</p>
+            <div id="qr-box"></div>
+            <div class="qr-url" id="qr-url-text"></div>
+            <button class="modal-close" onclick="closeQR()">Close</button>
         </div>
     </div>
 
-    <!-- Timer Bar -->
-    <div class="timer-bar" id="timer-bar">
-        <div class="timer-display" id="timer-display">00:00</div>
-        <div class="timer-controls">
-            <div class="timer-preset active" onclick="setPreset(1, this)">1 min</div>
-            <div class="timer-preset" onclick="setPreset(2, this)">2 min</div>
-            <div class="timer-preset" onclick="setPreset(3, this)">3 min</div>
-            <div class="timer-preset" onclick="setPreset(5, this)">5 min</div>
-            <div class="timer-preset" onclick="setPreset(10, this)">10 min</div>
-            <div class="timer-custom">
-                <input type="number" id="custom-min" placeholder="mm" min="0" max="99" oninput="setCustom()">
-                <span style="color:var(--muted); font-size:.8rem">min</span>
+    <div class="toast" id="toast"></div>
+
+    <div class="wrap">
+        <div class="err-banner" id="err-banner"></div>
+
+        <div class="header">
+            <div class="live-pill">
+                <div class="live-dot"></div>LIVE &middot; FIREBASE SYNC
             </div>
-            <button class="btn-icon btn-start" id="btn-start" onclick="startTimer()" title="Start">▶</button>
-            <button class="btn-icon btn-pause" id="btn-pause" onclick="pauseTimer()" title="Pause"
-                style="display:none">⏸</button>
-            <button class="btn-icon btn-reset-t" onclick="resetTimer()" title="Reset">↺</button>
+            <div class="title-row">
+                <input id="game-title" value="Score Board" size="12" oninput="autoSize(this);syncTitle()"
+                    title="Click to rename">
+                <span class="edit-ico" onclick="document.getElementById('game-title').focus()">&#9998;</span>
+            </div>
+            <div class="meta">
+                <span>&#128197; <span id="date-disp"></span></span>
+                <span>&#128336; <span id="time-disp"></span></span>
+                <span id="round-disp">&#127918; Round 1</span>
+            </div>
         </div>
-        <button class="timer-toggle" onclick="toggleTimer()">Hide Timer</button>
+
+        <div class="conn-bar">
+            <div class="conn-dot" id="conn-dot"></div>
+            <span id="conn-text">Connecting to Firebase&hellip;</span>
+        </div>
+
+        <div class="timer-panel" id="timer-panel">
+            <div class="timer-display" id="timer-disp">00:00</div>
+            <div class="t-presets">
+                <div class="t-pre on" onclick="setPreset(1,this)">1 min</div>
+                <div class="t-pre" onclick="setPreset(2,this)">2 min</div>
+                <div class="t-pre" onclick="setPreset(3,this)">3 min</div>
+                <div class="t-pre" onclick="setPreset(5,this)">5 min</div>
+                <div class="t-pre" onclick="setPreset(10,this)">10 min</div>
+                <div class="t-custom">
+                    <input type="number" id="t-custom-inp" placeholder="mm" min="1" max="99" oninput="setCustomTimer()">
+                    <span style="color:var(--muted);font-size:.8rem">min</span>
+                </div>
+            </div>
+            <button class="tico t-play" id="t-play" onclick="startTimer()" title="Start">&#9654;</button>
+            <button class="tico t-pause" id="t-pause" onclick="pauseTimer()" title="Pause"
+                style="display:none">&#9646;&#9646;</button>
+            <button class="tico t-rst" onclick="resetTimer()" title="Reset">&#8635;</button>
+            <button class="t-hide" onclick="toggleTimer()">Hide Timer</button>
+        </div>
+
+        <div id="teams-grid"></div>
+
+        <div class="action-bar">
+            <button class="btn-a b-add" onclick="addTeamUI()">+ Add Team</button>
+            <button class="btn-a b-save" onclick="saveGame()">&#128190; Save Game</button>
+            <button class="btn-a b-reset" onclick="resetAll()">&#8635; Reset Scores</button>
+            <button class="btn-a b-qr" onclick="openQR()">&#128242; Share QR</button>
+            <button class="btn-a b-export" onclick="exportJSON()">&#8595; Export</button>
+        </div>
+
+        <div class="stats" id="stats"></div>
+
+        <div class="section-hd">Game History</div>
+        <div class="hist-list" id="hist-list"></div>
     </div>
 
-    <!-- Teams -->
-    <div id="teams-grid"></div>
+    <!-- Firebase v9 modular SDK via CDN -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+        import {
+            getDatabase, ref, set, update,
+            onValue, get
+        } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
-    <!-- Action Buttons -->
-    <div class="action-bar">
-        <button class="btn-action add-btn" onclick="addNewTeam()">＋ Add Team</button>
-        <button class="btn-action save-btn" onclick="saveGame()">💾 Save Game</button>
-        <button class="btn-action reset-btn" onclick="resetAll()">↺ Reset Scores</button>
-        <button class="btn-action export-btn" onclick="exportJSON()">⬇ Export</button>
-        <button class="btn-action import-btn" onclick="document.getElementById('import-file').click()">⬆ Import</button>
-        <input type="file" id="import-file" accept=".json" onchange="importJSON(event)">
-    </div>
+        // ── CONFIG ──────────────────────────────────────────
+        const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const ROOT = 'scoreboard';
 
-    <!-- Stats -->
-    <div class="stats-bar" id="stats-bar"></div>
+        // ── STATE ────────────────────────────────────────────
+        const COLORS = ['#f5c842', '#34d97b', '#f07844', '#4f8ef7', '#a78bfa', '#f0504d', '#22d3ee'];
+        let localTeams = [];
+        let history = [];
+        let roundNum = 1;
+        let timerSecs = 60;
+        let timerLeft = 60;
+        let timerOn = false;
+        let timerInt = null;
+        let timerHide = false;
+        let cdBusy = false;
+        let teamCtr = 0;
+        let ignoreRemote = false;
+        let qrGenerated = false;
 
-    <!-- History -->
-    <div class="history-section">
-        <div class="section-title">Game History</div>
-        <div class="history-list" id="history-list"></div>
-    </div>
+        // ── INIT ─────────────────────────────────────────────
+        updateClock();
+        setInterval(updateClock, 1000);
+        renderTimer();
+        autoSize(document.getElementById('game-title'));
+        setupFirebase();
 
-    <script>
-        // ── STATE ──
-        const TEAM_COLORS = ['#f0c040', '#3ecf8e', '#e8834a', '#6c8ef5', '#f25f5c', '#a78bfa', '#22d3ee'];
-        let teams = [];
-        let history = JSON.parse(localStorage.getItem('sb_history') || '[]');
-        let timerInterval = null;
-        let timerSeconds = 60;
-        let timerRemaining = 60;
-        let timerRunning = false;
-        let timerHidden = false;
-        let stepSize = 1; // per-team step
-        let roundNumber = 1;
-        let countdownInProgress = false;
-
-        // ── INIT ──
-        window.addEventListener('load', () => {
-            updateDateTime();
-            setInterval(updateDateTime, 1000);
-            loadFromStorage();
-            renderHistory();
-            updateStats();
-            autoSize(document.getElementById('game-title'));
-            // Restore round
-            roundNumber = parseInt(localStorage.getItem('sb_round') || '1');
-            document.getElementById('round-display').textContent = '🎮 Round ' + roundNumber;
-        });
-
-        function loadFromStorage() {
-            const saved = localStorage.getItem('sb_teams');
-            if (saved) {
-                const data = JSON.parse(saved);
-                data.forEach((t, i) => addNewTeam(t.name, t.score, TEAM_COLORS[i % TEAM_COLORS.length]));
-            } else {
-                addNewTeam('Team 1', 0, TEAM_COLORS[0]);
-                addNewTeam('Team 2', 0, TEAM_COLORS[1]);
-            }
-        }
-
-        function saveToStorage() {
-            const data = [...document.querySelectorAll('.team-box')].map((box, i) => ({
-                name: box.querySelector('.team-name').value,
-                score: parseInt(box.querySelector('.score-display').textContent)
-            }));
-            localStorage.setItem('sb_teams', JSON.stringify(data));
-        }
-
-        // ── DATE / TIME ──
-        function updateDateTime() {
-            const now = new Date();
-            document.getElementById('date-display').textContent = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-            document.getElementById('time-display').textContent = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-        }
-
-        // ── TITLE ──
-        function autoSize(el) {
-            el.style.width = '10px';
-            el.style.width = (el.scrollWidth + 4) + 'px';
-        }
-
-        // ── TEAMS ──
-        let teamIdCounter = 0;
-
-        function addNewTeam(name, score = 0, color) {
-            const grid = document.getElementById('teams-grid');
-            const id = ++teamIdCounter;
-            const idx = (id - 1) % TEAM_COLORS.length;
-            const col = color || TEAM_COLORS[idx];
-
-            const box = document.createElement('div');
-            box.className = 'team-box';
-            box.dataset.id = id;
-            box.innerHTML = `
-    <div class="leader-badge">🏆 Leading</div>
-    <div class="team-color-dot" style="background:${col}"></div>
-    <button class="remove-team" onclick="removeTeam(this)" title="Remove team">×</button>
-    <input type="text" class="team-name" placeholder="Team Name" value="${name || 'Team ' + id}" oninput="onScoreChange()">
-    <div class="controls-wrapper">
-      <button class="btn-score btn-minus" onclick="changeScore(this, -1)">−</button>
-      <div class="score-display" id="sd-${id}">${score}</div>
-      <button class="btn-score btn-plus" onclick="changeScore(this, 1)">+</button>
-    </div>
-    <div class="step-btns">
-      <button class="step-btn active-step" onclick="setStep(this, 1)">±1</button>
-      <button class="step-btn" onclick="setStep(this, 2)">±2</button>
-      <button class="step-btn" onclick="setStep(this, 5)">±5</button>
-      <button class="step-btn" onclick="setStep(this, 10)">±10</button>
-    </div>
-  `;
-            grid.appendChild(box);
-            onScoreChange();
-            return box;
-        }
-
-        function removeTeam(btn) {
-            if (document.querySelectorAll('.team-box').length <= 1) return;
-            btn.parentElement.remove();
-            onScoreChange();
-            saveToStorage();
-        }
-
-        function changeScore(btn, dir) {
-            const box = btn.closest('.team-box');
-            const activeStep = box.querySelector('.step-btn.active-step');
-            const step = activeStep ? parseInt(activeStep.textContent.replace('±', '')) : 1;
-            const disp = box.querySelector('.score-display');
-            let v = parseInt(disp.textContent) + dir * step;
-            disp.textContent = v;
-            disp.classList.remove('bump');
-            void disp.offsetWidth;
-            disp.classList.add('bump');
-            onScoreChange();
-            saveToStorage();
-        }
-
-        function setStep(btn, n) {
-            btn.closest('.team-box').querySelectorAll('.step-btn').forEach(b => b.classList.remove('active-step'));
-            btn.classList.add('active-step');
-        }
-
-        function onScoreChange() {
-            const boxes = [...document.querySelectorAll('.team-box')];
-            const scores = boxes.map(b => parseInt(b.querySelector('.score-display').textContent));
-            const max = Math.max(...scores);
-            boxes.forEach((box, i) => {
-                const isLeader = scores[i] === max && scores.filter(s => s === max).length === 1;
-                box.classList.toggle('leader', isLeader);
+        // ── FIREBASE ─────────────────────────────────────────
+        function setupFirebase() {
+            // Connection monitor
+            onValue(ref(db, '.info/connected'), snap => {
+                const on = snap.val();
+                document.getElementById('conn-dot').className = 'conn-dot ' + (on ? 'online' : 'offline');
+                document.getElementById('conn-text').textContent = on
+                    ? 'Live — all changes sync to every device instantly'
+                    : 'Offline — reconnecting…';
             });
+
+            // Main data listener
+            onValue(ref(db, ROOT), snap => {
+                if (ignoreRemote) return;
+                const data = snap.val();
+                if (!data) { pushDefaults(); return; }
+                applyRemoteState(data);
+            }, err => {
+                showError('Firebase error: ' + err.message + ' — check your database rules are set to test mode.');
+            });
+        }
+
+        function pushDefaults() {
+            localTeams = [
+                { id: 1, name: 'Team 1', score: 0, color: COLORS[0] },
+                { id: 2, name: 'Team 2', score: 0, color: COLORS[1] }
+            ];
+            teamCtr = 2;
+            set(ref(db, ROOT), { title: 'Score Board', round: 1, teams: localTeams, history: [] });
+        }
+
+        function applyRemoteState(data) {
+            if (data.title !== undefined) {
+                const el = document.getElementById('game-title');
+                if (el.value !== data.title) { el.value = data.title; autoSize(el); }
+            }
+            if (data.round !== undefined) {
+                roundNum = data.round;
+                document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+            }
+            if (data.teams) {
+                localTeams = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
+                teamCtr = Math.max(...localTeams.map(t => t.id), teamCtr);
+                renderTeams();
+            }
+            if (data.history) {
+                history = Array.isArray(data.history) ? data.history : Object.values(data.history);
+                renderHistory();
+            }
             updateStats();
+        }
+
+        function pushRemote(partial) {
+            ignoreRemote = true;
+            update(ref(db, ROOT), partial).finally(() => {
+                setTimeout(() => { ignoreRemote = false; }, 400);
+            });
+        }
+        function pushTeams() { pushRemote({ teams: localTeams }); }
+        function pushAll() {
+            pushRemote({
+                title: document.getElementById('game-title').value,
+                round: roundNum,
+                teams: localTeams,
+                history: history
+            });
+        }
+
+        // ── TITLE ────────────────────────────────────────────
+        let titleDB;
+        function syncTitle() {
+            clearTimeout(titleDB);
+            titleDB = setTimeout(() => pushRemote({ title: document.getElementById('game-title').value }), 600);
+        }
+        window.syncTitle = syncTitle;
+
+        // ── RENDER TEAMS ─────────────────────────────────────
+        function renderTeams() {
+            const grid = document.getElementById('teams-grid');
+            // preserve step selections
+            const stepMap = {};
+            grid.querySelectorAll('.team-box').forEach(b => {
+                const s = b.querySelector('.step.on');
+                if (s) stepMap[b.dataset.id] = parseInt(s.textContent.replace('±', ''));
+            });
+            grid.innerHTML = '';
+            const maxScore = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
+            localTeams.forEach((team, idx) => {
+                const lead = team.score === maxScore
+                    && localTeams.filter(t => t.score === maxScore).length === 1
+                    && maxScore > 0;
+                const col = team.color || COLORS[idx % COLORS.length];
+                const step = stepMap[String(team.id)] || 1;
+                const box = document.createElement('div');
+                box.className = 'team-box' + (lead ? ' leader' : '');
+                box.dataset.id = team.id;
+                box.innerHTML = `
+      <div class="leader-crown">&#127942; Leading</div>
+      <div class="color-strip" style="background:${col}"></div>
+      <button class="rm-team" data-id="${team.id}">&#215;</button>
+      <input type="text" class="team-name" value="${esc(team.name)}"
+             data-id="${team.id}" placeholder="Team Name">
+      <div class="ctrls">
+        <button class="bscore bminus" data-id="${team.id}" data-dir="-1">&#8722;</button>
+        <div class="score-num" id="sn-${team.id}">${team.score}</div>
+        <button class="bscore bplus"  data-id="${team.id}" data-dir="1">+</button>
+      </div>
+      <div class="steps">
+        ${[1, 2, 5, 10].map(n =>
+                    `<button class="step${n === step ? ' on' : ''}" data-id="${team.id}" data-step="${n}">&plusmn;${n}</button>`
+                ).join('')}
+      </div>`;
+                grid.appendChild(box);
+            });
+
+            // Event delegation — attach once to grid
+            grid.onclick = e => {
+                const rm = e.target.closest('.rm-team');
+                const bs = e.target.closest('.bscore');
+                const st = e.target.closest('.step');
+                if (rm) removeTeam(parseInt(rm.dataset.id));
+                if (bs) changeScore(parseInt(bs.dataset.id), parseInt(bs.dataset.dir));
+                if (st) setStep(st, parseInt(st.dataset.id), parseInt(st.dataset.step));
+            };
+            grid.onchange = e => {
+                const tn = e.target.closest('.team-name');
+                if (tn) updateTeamName(parseInt(tn.dataset.id), tn.value);
+            };
+        }
+
+        function getStep(teamId) {
+            const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
+            const s = box && box.querySelector('.step.on');
+            return s ? parseInt(s.dataset.step) : 1;
+        }
+        function esc(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // ── TEAM ACTIONS ─────────────────────────────────────
+        function addTeamUI() {
+            const id = ++teamCtr;
+            const col = COLORS[localTeams.length % COLORS.length];
+            localTeams.push({ id, name: 'Team ' + id, score: 0, color: col });
+            renderTeams(); pushTeams(); updateStats();
+        }
+        window.addTeamUI = addTeamUI;
+
+        function removeTeam(id) {
+            if (localTeams.length <= 1) return;
+            localTeams = localTeams.filter(t => t.id !== id);
+            renderTeams(); pushTeams(); updateStats();
+        }
+
+        function updateTeamName(id, val) {
+            const t = localTeams.find(t => t.id === id);
+            if (t) { t.name = val; pushTeams(); }
+        }
+
+        function changeScore(id, dir) {
+            const step = getStep(id);
+            const t = localTeams.find(t => t.id === id);
+            if (!t) return;
+            t.score += dir * step;
+            const el = document.getElementById('sn-' + id);
+            if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent = t.score; }
+            renderLeaders(); pushTeams(); updateStats();
+        }
+
+        function renderLeaders() {
+            const max = Math.max(...localTeams.map(t => t.score));
+            document.querySelectorAll('.team-box').forEach(box => {
+                const t = localTeams.find(x => x.id == box.dataset.id);
+                if (!t) return;
+                const lead = t.score === max && localTeams.filter(x => x.score === max).length === 1 && max > 0;
+                box.classList.toggle('leader', lead);
+            });
+        }
+
+        function setStep(btn, teamId, n) {
+            const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
+            if (!box) return;
+            box.querySelectorAll('.step').forEach(b => b.classList.remove('on'));
+            btn.classList.add('on');
         }
 
         function resetAll() {
             if (!confirm('Reset all scores to 0?')) return;
-            document.querySelectorAll('.score-display').forEach(d => { d.textContent = '0'; });
-            roundNumber++;
-            localStorage.setItem('sb_round', roundNumber);
-            document.getElementById('round-display').textContent = '🎮 Round ' + roundNumber;
-            onScoreChange();
-            saveToStorage();
+            localTeams.forEach(t => t.score = 0);
+            roundNum++;
+            document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+            renderTeams(); pushAll(); updateStats();
+            showToast('Round ' + roundNum + ' begins! 🎮');
         }
+        window.resetAll = resetAll;
 
-        // ── SAVE GAME ──
+        // ── SAVE GAME ────────────────────────────────────────
         function saveGame() {
-            const teams = [...document.querySelectorAll('.team-box')].map(box => ({
-                name: box.querySelector('.team-name').value,
-                score: parseInt(box.querySelector('.score-display').textContent),
-                color: box.querySelector('.team-color-dot')?.style.background || '#f0c040'
-            }));
-            if (teams.length === 0) return;
-            const maxScore = Math.max(...teams.map(t => t.score));
             const entry = {
                 id: Date.now(),
                 game: document.getElementById('game-title').value || 'Score Board',
                 date: new Date().toLocaleString(),
-                round: roundNumber,
-                teams
+                round: roundNum,
+                teams: localTeams.map(t => ({ ...t }))
             };
             history.unshift(entry);
-            if (history.length > 50) history = history.slice(0, 50);
-            localStorage.setItem('sb_history', JSON.stringify(history));
-            renderHistory();
-            updateStats();
+            if (history.length > 60) history = history.slice(0, 60);
+            pushAll(); renderHistory(); updateStats();
             showToast('Game saved! 💾');
         }
+        window.saveGame = saveGame;
 
-        // ── HISTORY ──
+        // ── HISTORY ──────────────────────────────────────────
         function renderHistory() {
-            const el = document.getElementById('history-list');
-            if (history.length === 0) {
-                el.innerHTML = '<div class="empty-history">No saved games yet — press "Save Game" after each round!</div>';
+            const el = document.getElementById('hist-list');
+            if (!history.length) {
+                el.innerHTML = '<div class="empty">No saved games yet — press Save Game after each round!</div>';
                 return;
             }
-            el.innerHTML = history.map((entry, i) => {
-                const maxScore = Math.max(...entry.teams.map(t => t.score));
-                const chips = entry.teams.map(t => {
-                    const win = t.score === maxScore && entry.teams.filter(x => x.score === maxScore).length === 1;
-                    return `<span class="history-score-chip${win ? ' winner' : ''}" style="${win ? '' : 'border-left:3px solid ' + t.color}">${t.name}: ${t.score}</span>`;
+            el.innerHTML = history.map((e, i) => {
+                const max = Math.max(...e.teams.map(t => t.score));
+                const chips = e.teams.map(t => {
+                    const w = t.score === max && e.teams.filter(x => x.score === max).length === 1;
+                    return `<span class="chip${w ? ' win' : ''}" style="${w ? '' : 'border-left:3px solid ' + t.color}">${esc(t.name)}: ${t.score}</span>`;
                 }).join('');
-                return `
-    <div class="history-card">
-      <div class="history-date">${entry.date}</div>
-      <div>
-        <div class="history-game">${entry.game} · Round ${entry.round}</div>
-        <div class="history-scores" style="margin-top:6px">${chips}</div>
+                return `<div class="hist-card">
+      <div class="hist-date">${e.date}</div>
+      <div style="flex:1">
+        <div class="hist-name">${esc(e.game)} &middot; Round ${e.round}</div>
+        <div class="hist-chips" style="margin-top:6px">${chips}</div>
       </div>
-      <button class="history-restore" onclick="restoreGame(${i})">↩ Restore</button>
-      <button class="history-del" onclick="deleteHistory(${i})" title="Delete">🗑</button>
+      <button class="hist-restore" data-idx="${i}">&#8617; Restore</button>
+      <button class="hist-del" data-idx="${i}">&#128465;</button>
     </div>`;
             }).join('');
+
+            el.onclick = e => {
+                const r = e.target.closest('.hist-restore');
+                const d = e.target.closest('.hist-del');
+                if (r) restoreGame(parseInt(r.dataset.idx));
+                if (d) delHistory(parseInt(d.dataset.idx));
+            };
         }
 
         function restoreGame(idx) {
-            const entry = history[idx];
-            if (!confirm(`Restore "${entry.game}" (Round ${entry.round})?`)) return;
-            document.getElementById('game-title').value = entry.game;
+            const e = history[idx];
+            if (!confirm('Restore "' + e.game + '" Round ' + e.round + '?')) return;
+            document.getElementById('game-title').value = e.game;
             autoSize(document.getElementById('game-title'));
-            const grid = document.getElementById('teams-grid');
-            grid.innerHTML = '';
-            teamIdCounter = 0;
-            entry.teams.forEach((t, i) => addNewTeam(t.name, t.score, t.color || TEAM_COLORS[i % TEAM_COLORS.length]));
-            roundNumber = entry.round;
-            document.getElementById('round-display').textContent = '🎮 Round ' + roundNumber;
-            saveToStorage();
-            showToast('Game restored! ↩');
+            localTeams = e.teams.map(t => ({ ...t }));
+            teamCtr = Math.max(...localTeams.map(t => t.id), teamCtr);
+            roundNum = e.round;
+            document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+            renderTeams(); pushAll(); updateStats();
+            showToast('Restored! ↩');
         }
 
-        function deleteHistory(idx) {
+        function delHistory(idx) {
             history.splice(idx, 1);
-            localStorage.setItem('sb_history', JSON.stringify(history));
-            renderHistory();
-            updateStats();
+            pushRemote({ history }); renderHistory(); updateStats();
         }
 
-        // ── STATS ──
+        // ── STATS ────────────────────────────────────────────
         function updateStats() {
-            const bar = document.getElementById('stats-bar');
-            const allTeams = [...document.querySelectorAll('.team-box')].map(b => ({
-                name: b.querySelector('.team-name').value,
-                score: parseInt(b.querySelector('.score-display').textContent)
-            }));
-            const total = allTeams.reduce((a, t) => a + t.score, 0);
-            const leader = allTeams.sort((a, b) => b.score - a.score)[0];
-            bar.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Total Points</div><div class="stat-value">${total}</div></div>
-    <div class="stat-card"><div class="stat-label">Leading Team</div><div class="stat-value" style="font-size:1.2rem;padding-top:4px">${leader ? leader.name : '—'}</div></div>
-    <div class="stat-card"><div class="stat-label">Games Saved</div><div class="stat-value">${history.length}</div></div>
-    <div class="stat-card"><div class="stat-label">Current Round</div><div class="stat-value">${roundNumber}</div></div>
+            const total = localTeams.reduce((a, t) => a + t.score, 0);
+            const sorted = [...localTeams].sort((a, b) => b.score - a.score);
+            const leader = sorted[0];
+            const gap = sorted.length > 1 ? sorted[0].score - sorted[1].score : 0;
+            document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${total}</div></div>
+    <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:1rem;padding-top:6px">${leader ? esc(leader.name) : '—'}</div></div>
+    <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${gap}</div></div>
+    <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${history.length}</div></div>
+    <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
   `;
         }
 
-        // ── TIMER ──
+        // ── QR ───────────────────────────────────────────────
+        function openQR() {
+            const url = window.location.href;
+            document.getElementById('qr-url-text').textContent = url;
+            if (!qrGenerated) {
+                document.getElementById('qr-box').innerHTML = '';
+                new QRCode(document.getElementById('qr-box'), {
+                    text: url, width: 220, height: 220,
+                    colorDark: '#f5c842', colorLight: '#10131a',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                qrGenerated = true;
+            }
+            document.getElementById('qr-modal').classList.add('show');
+        }
+        function closeQR() { document.getElementById('qr-modal').classList.remove('show'); }
+        window.openQR = openQR;
+        window.closeQR = closeQR;
+        document.getElementById('qr-modal').addEventListener('click', e => {
+            if (e.target === document.getElementById('qr-modal')) closeQR();
+        });
+
+        // ── TIMER ────────────────────────────────────────────
         function setPreset(mins, el) {
-            document.querySelectorAll('.timer-preset').forEach(e => e.classList.remove('active'));
-            if (el) el.classList.add('active');
-            timerSeconds = mins * 60;
-            timerRemaining = timerSeconds;
-            if (!timerRunning) renderTimer();
+            document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
+            if (el) el.classList.add('on');
+            timerSecs = mins * 60; timerLeft = timerSecs;
+            if (!timerOn) renderTimer();
         }
-
-        function setCustom() {
-            const v = parseInt(document.getElementById('custom-min').value);
-            if (isNaN(v) || v <= 0) return;
-            document.querySelectorAll('.timer-preset').forEach(e => e.classList.remove('active'));
-            timerSeconds = v * 60;
-            timerRemaining = timerSeconds;
-            if (!timerRunning) renderTimer();
+        function setCustomTimer() {
+            const v = parseInt(document.getElementById('t-custom-inp').value);
+            if (!v || v < 1) return;
+            document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
+            timerSecs = v * 60; timerLeft = timerSecs;
+            if (!timerOn) renderTimer();
         }
-
         function renderTimer() {
-            const m = Math.floor(timerRemaining / 60).toString().padStart(2, '0');
-            const s = (timerRemaining % 60).toString().padStart(2, '0');
-            const disp = document.getElementById('timer-display');
-            disp.textContent = `${m}:${s}`;
-            disp.className = 'timer-display';
-            if (timerRemaining <= 10 && timerRemaining > 3) disp.classList.add('warning');
-            if (timerRemaining <= 3) disp.classList.add('danger');
+            const m = String(Math.floor(timerLeft / 60)).padStart(2, '0');
+            const s = String(timerLeft % 60).padStart(2, '0');
+            const el = document.getElementById('timer-disp');
+            el.textContent = m + ':' + s;
+            el.className = 'timer-display';
+            if (timerLeft <= 10 && timerLeft > 3) el.classList.add('warn');
+            if (timerLeft <= 3) el.classList.add('danger');
         }
-
         function startTimer() {
-            if (timerRunning) return;
-            if (timerRemaining <= 0) timerRemaining = timerSeconds;
-            timerRunning = true;
-            document.getElementById('btn-start').style.display = 'none';
-            document.getElementById('btn-pause').style.display = 'flex';
-            timerInterval = setInterval(() => {
-                timerRemaining--;
-                renderTimer();
-                if (timerRemaining <= 3 && timerRemaining > 0 && !countdownInProgress) {
-                    showCountdown(timerRemaining);
-                }
-                if (timerRemaining <= 0) {
-                    clearInterval(timerInterval);
-                    timerRunning = false;
-                    document.getElementById('btn-start').style.display = 'flex';
-                    document.getElementById('btn-pause').style.display = 'none';
+            if (timerOn) return;
+            if (timerLeft <= 0) timerLeft = timerSecs;
+            timerOn = true;
+            document.getElementById('t-play').style.display = 'none';
+            document.getElementById('t-pause').style.display = 'flex';
+            timerInt = setInterval(() => {
+                timerLeft--; renderTimer();
+                if (timerLeft <= 3 && timerLeft > 0 && !cdBusy) showCountdown(timerLeft);
+                if (timerLeft <= 0) {
+                    clearInterval(timerInt); timerOn = false;
+                    document.getElementById('t-play').style.display = 'flex';
+                    document.getElementById('t-pause').style.display = 'none';
                     showCountdown(0);
                 }
             }, 1000);
         }
-
         function pauseTimer() {
-            clearInterval(timerInterval);
-            timerRunning = false;
-            document.getElementById('btn-start').style.display = 'flex';
-            document.getElementById('btn-pause').style.display = 'none';
+            clearInterval(timerInt); timerOn = false;
+            document.getElementById('t-play').style.display = 'flex';
+            document.getElementById('t-pause').style.display = 'none';
         }
-
-        function resetTimer() {
-            pauseTimer();
-            timerRemaining = timerSeconds;
-            renderTimer();
-        }
-
+        function resetTimer() { pauseTimer(); timerLeft = timerSecs; renderTimer(); }
         function toggleTimer() {
-            timerHidden = !timerHidden;
-            const bar = document.getElementById('timer-bar');
-            const displays = bar.querySelectorAll(':not(.timer-toggle)');
-            displays.forEach(el => el.style.display = timerHidden ? 'none' : '');
-            bar.querySelector('.timer-toggle').textContent = timerHidden ? 'Show Timer' : 'Hide Timer';
-            if (timerHidden) pauseTimer();
+            timerHide = !timerHide;
+            const p = document.getElementById('timer-panel');
+            [...p.children].forEach(c => { if (!c.classList.contains('t-hide')) c.style.display = timerHide ? 'none' : ''; });
+            p.querySelector('.t-hide').textContent = timerHide ? 'Show Timer' : 'Hide Timer';
+            if (timerHide) pauseTimer();
         }
-
         function showCountdown(n) {
-            countdownInProgress = true;
-            const overlay = document.getElementById('countdown-overlay');
-            const num = document.getElementById('countdown-number');
-            overlay.classList.add('show');
-            num.textContent = n === 0 ? '🏁' : n;
-            setTimeout(() => {
-                overlay.classList.remove('show');
-                countdownInProgress = false;
-            }, 900);
+            cdBusy = true;
+            const ov = document.getElementById('cdown');
+            const nm = document.getElementById('cdown-num');
+            nm.textContent = n === 0 ? '🏁' : n;
+            nm.style.animation = 'none'; void nm.offsetWidth;
+            nm.style.animation = 'cPop .85s ease-out forwards';
+            ov.classList.add('show');
+            setTimeout(() => { ov.classList.remove('show'); cdBusy = false; }, 900);
+        }
+        window.setPreset = setPreset;
+        window.setCustomTimer = setCustomTimer;
+        window.startTimer = startTimer;
+        window.pauseTimer = pauseTimer;
+        window.resetTimer = resetTimer;
+        window.toggleTimer = toggleTimer;
+
+        // ── CLOCK ────────────────────────────────────────────
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('date-disp').textContent =
+                now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            document.getElementById('time-disp').textContent =
+                now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
         }
 
-        // ── EXPORT / IMPORT ──
+        // ── EXPORT ───────────────────────────────────────────
         function exportJSON() {
-            const data = {
-                exported: new Date().toISOString(),
-                game: document.getElementById('game-title').value,
-                history
-            };
+            const data = { exported: new Date().toISOString(), teams: localTeams, history };
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `scoreboard-${Date.now()}.json`;
-            a.click();
-            showToast('Exported! ⬇');
+            a.href = URL.createObjectURL(blob); a.download = 'scoreboard-' + Date.now() + '.json'; a.click();
+            showToast('Exported!');
         }
+        window.exportJSON = exportJSON;
 
-        function importJSON(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = ev => {
-                try {
-                    const data = JSON.parse(ev.target.result);
-                    if (data.history) {
-                        history = [...data.history, ...history].slice(0, 50);
-                        localStorage.setItem('sb_history', JSON.stringify(history));
-                        renderHistory();
-                        updateStats();
-                        showToast('Imported! ⬆');
-                    }
-                } catch { alert('Invalid file format.'); }
-            };
-            reader.readAsText(file);
-            e.target.value = '';
-        }
-
-        // ── TOAST ──
+        // ── UTILS ────────────────────────────────────────────
+        function autoSize(el) { el.style.width = '10px'; el.style.width = (el.scrollWidth + 6) + 'px'; }
         function showToast(msg) {
             const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2500);
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 2600);
         }
+        function showError(msg) {
+            const b = document.getElementById('err-banner');
+            b.textContent = '⚠️ ' + msg; b.classList.add('show');
+        }
+        window.autoSize = autoSize;
 
-        // Init render
-        renderTimer();
     </script>
 </body>
 
