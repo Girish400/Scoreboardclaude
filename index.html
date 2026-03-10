@@ -220,7 +220,19 @@ import { getDatabase, ref, set,
 const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
-const ROOT = 'scoreboard';
+
+// Each room gets its own Firebase path derived from the URL hash.
+// Sharing the URL (including hash) connects others to the same room.
+// A fresh load with no hash generates a new room ID and sets the hash.
+function getRoomId() {
+  const hash = location.hash.replace('#', '').trim();
+  if (hash && /^[a-z0-9]{6,16}$/.test(hash)) return hash;
+  const newId = Math.random().toString(36).slice(2, 10);
+  history.replaceState(null, '', '#' + newId);
+  return newId;
+}
+const ROOM_ID = getRoomId();
+const ROOT = 'rooms/' + ROOM_ID;
 
 // ══ AUDIO ═════════════════════════════════════════════
 // All sounds generated via Web Audio API — no external files needed, works offline too
@@ -228,69 +240,69 @@ let audioCtx = null;
 
 function getAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  // Resume if suspended (mobile browsers suspend after ~10 min idle)
-  if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
+}
+
+// Safe audio play — resumes context first (handles remote-triggered sounds with no gesture)
+function withAudio(fn) {
+  try {
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => { try { fn(ctx); } catch(e){} }).catch(()=>{});
+    } else {
+      fn(ctx);
+    }
+  } catch(e) {}
 }
 
 // Bright ding for score change
 function playDing(isAdd = true) {
-  try {
-    const ctx = getAudioCtx();
+  withAudio(ctx => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     osc.type = 'sine';
-    // Higher pitch for add, lower for subtract
     osc.frequency.setValueAtTime(isAdd ? 880 : 440, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(isAdd ? 1320 : 330, ctx.currentTime + 0.08);
     gain.gain.setValueAtTime(0.4, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35);
     osc.onended = () => { osc.disconnect(); gain.disconnect(); };
-  } catch(e) {}
+  });
 }
 
 // Urgent beep for countdown 3-2-1
 function playBeep(freq = 880) {
-  try {
-    const ctx = getAudioCtx();
+  withAudio(ctx => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     osc.type = 'square';
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
     gain.gain.setValueAtTime(0.35, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.25);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.25);
     osc.onended = () => { osc.disconnect(); gain.disconnect(); };
-  } catch(e) {}
+  });
 }
 
 // Fanfare / alarm when timer hits 0
 function playAlarm() {
-  try {
-    const ctx = getAudioCtx();
+  withAudio(ctx => {
     const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
     notes.forEach((freq, i) => {
-      const osc  = ctx.createOscillator();
+      const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      osc.connect(gain); gain.connect(ctx.destination);
       osc.type = 'triangle';
       const t = ctx.currentTime + i * 0.18;
       osc.frequency.setValueAtTime(freq, t);
       gain.gain.setValueAtTime(0.4, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-      osc.start(t);
-      osc.stop(t + 0.35);
+      osc.start(t); osc.stop(t + 0.35);
       osc.onended = () => { osc.disconnect(); gain.disconnect(); };
     });
-  } catch(e) {}
+  });
 }
 
 // ══ STATE ═════════════════════════════════════════════
@@ -317,6 +329,8 @@ updateClock();
 setInterval(updateClock, 1000);
 renderTimerDisplay(timerSecs);
 autoSize(document.getElementById('game-title'));
+// Restore last known state immediately (before Firebase responds) so offline users see scores
+const hadLocal = loadLocal();
 setupFirebase();
 
 // ══ SERVER TIME OFFSET ════════════════════════════════
@@ -369,6 +383,10 @@ function pushDefaults() {
         { id:1, name:'Team 1', score:0, color:COLORS[0] },
         { id:2, name:'Team 2', score:0, color:COLORS[1] }
       ],
+      teams_obj: {
+        1: { id:1, name:'Team 1', score:0, color:COLORS[0] },
+        2: { id:2, name:'Team 2', score:0, color:COLORS[1] }
+      },
       history: [],
       timer: { secs: 60, durationMs: 60000, running: false, startedAt: null, remainingMs: 60000, pausedAt: null }
     };
@@ -397,6 +415,13 @@ function applyRemoteState(data) {
   // Teams — surgical update: only re-render if structure changed (add/remove/rename)
   if (data.teams) {
     const incoming = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
+    // Reconcile any id-keyed score updates from teams_obj (atomic transactions)
+    if (data.teams_obj) {
+      incoming.forEach(t => {
+        const obj = data.teams_obj[t.id];
+        if (obj && obj.score !== undefined) t.score = obj.score;
+      });
+    }
     const structureChanged =
       incoming.length !== localTeams.length ||
       incoming.some((t, i) => t.id !== localTeams[i]?.id || t.name !== localTeams[i]?.name || t.color !== localTeams[i]?.color);
@@ -477,7 +502,6 @@ function syncTimerFromRemote(t) {
 function startLocalTick() {
   stopLocalTick();
   function tick() {
-    // When running: always compute from server start + total duration — never stale local state
     const elapsed = timerStartedAt ? serverNow() - timerStartedAt : 0;
     const leftMs  = Math.max(0, (timerDurationMs || timerSecs * 1000) - elapsed);
     const secs    = Math.floor(leftMs / 1000);
@@ -487,7 +511,6 @@ function startLocalTick() {
       timerLeft = secs;
       renderTimerDisplay(secs);
 
-      // Countdown beeps at 3, 2, 1
       if (secs <= 3 && secs > 0) {
         playBeep(secs === 1 ? 1200 : secs === 2 ? 1000 : 800);
         if (!cdBusy) showCountdown(secs);
@@ -502,13 +525,14 @@ function startLocalTick() {
         return;
       }
     }
-    timerInt = requestAnimationFrame(tick);
   }
-  timerInt = requestAnimationFrame(tick);
+  // 100ms interval: detects second boundary within ≤100ms — imperceptible to users,
+  // uses ~1/6th the CPU of requestAnimationFrame (60fps) for a once-per-second update
+  timerInt = setInterval(tick, 100);
 }
 
 function stopLocalTick() {
-  if (timerInt) { cancelAnimationFrame(timerInt); timerInt = null; }
+  if (timerInt) { clearInterval(timerInt); timerInt = null; }
 }
 
 function renderTimerDisplay(secs) {
@@ -535,11 +559,15 @@ function pushTimerState(running, overrideRemainingMs) {
       remainingMs: null, pausedAt: null
     }});
   } else {
-    // Compute exact remaining from server timestamps — deterministic across all devices
-    const elapsed   = timerStartedAt ? serverNow() - timerStartedAt : 0;
-    const remaining = Math.max(0, (timerDurationMs || timerSecs * 1000) - elapsed);
+    // Compute remaining entirely from server-anchored values.
+    // timerStartedAt and timerDurationMs were set when we received the last
+    // running=true Firebase update, so they are always in sync with the server.
+    const elapsed   = timerStartedAt ? (serverNow() - timerStartedAt) : 0;
+    const remaining = Math.max(0, timerDurationMs - elapsed);
     timerPausedLeft = remaining;
     timerStartedAt  = null;
+    // Do NOT read timerDurationMs from local state for the stored field —
+    // write the value we just computed so all devices read the same number.
     pushRemote({ timer: {
       secs: timerSecs, durationMs: timerDurationMs,
       running: false, startedAt: null,
@@ -655,23 +683,76 @@ let localWriteSeq = 0;  // increments on every push from this device
 
 function pushRemote(partial) {
   localWriteSeq++;
-  const seq = localWriteSeq;
-  // Tag every write with our clientId + sequence number
   partial._cid = CLIENT_ID;
-  partial._seq = seq;
+  partial._seq = localWriteSeq;
   update(ref(db, ROOT), partial);
+  saveLocal(); // persist to localStorage for offline recovery
 }
-function pushTeams() { pushRemote({ teams: localTeams }); }
+function teamsToObj(teams) {
+  const obj = {};
+  teams.forEach(t => { obj[t.id] = t; });
+  return obj;
+}
+function pushTeams() {
+  const obj = teamsToObj(localTeams);
+  pushRemote({ teams: localTeams, teams_obj: obj });
+}
 function pushAll() {
+  const obj = teamsToObj(localTeams);
   pushRemote({
-    title:   document.getElementById('game-title').value,
-    round:   roundNum,
-    teams:   localTeams,
-    history: history
+    title:     document.getElementById('game-title').value,
+    round:     roundNum,
+    teams:     localTeams,
+    teams_obj: obj,
+    history:   history
   });
 }
 
-// ══ TITLE ═════════════════════════════════════════════
+// ══ LOCAL PERSISTENCE ════════════════════════════════
+// Saves to localStorage on every push so a refresh-while-offline
+// restores the last known state instead of showing an empty board.
+const LS_KEY = 'scoreboard_local_v1';
+
+function saveLocal() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      title:     document.getElementById('game-title').value,
+      round:     roundNum,
+      teams:     localTeams,
+      history:   history,
+      savedAt:   Date.now()
+    }));
+  } catch(e) {}
+}
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    // Only restore if saved within last 24 hours
+    if (!d || Date.now() - d.savedAt > 86400000) return false;
+    if (d.title) {
+      const el = document.getElementById('game-title');
+      el.value = d.title; autoSize(el);
+    }
+    if (d.round) {
+      roundNum = d.round;
+      document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+    }
+    if (d.teams && d.teams.length) {
+      localTeams = d.teams;
+      teamCtr    = Math.max(teamCtr, ...localTeams.map(t => t.id || 0));
+      renderTeams();
+    }
+    if (d.history) {
+      history = d.history;
+      renderHistory();
+    }
+    updateStats();
+    return true;
+  } catch(e) { return false; }
+}
 let titleDB;
 function syncTitle() {
   clearTimeout(titleDB);
@@ -682,52 +763,79 @@ window.syncTitle = syncTitle;
 // ══ RENDER TEAMS ══════════════════════════════════════
 function renderTeams() {
   const grid = document.getElementById('teams-grid');
-  const stepMap = {};
-  grid.querySelectorAll('.team-box').forEach(b => {
-    const s = b.querySelector('.step.on');
-    if (s) stepMap[b.dataset.id] = parseInt(s.dataset.step);
-  });
-  grid.innerHTML = '';
   const maxScore = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
-  localTeams.forEach((team, idx) => {
-    const lead = team.score === maxScore
-               && localTeams.filter(t => t.score === maxScore).length === 1
-               && maxScore > 0;
-    const col  = team.color || COLORS[idx % COLORS.length];
-    const step = team.step || stepMap[String(team.id)] || 1;
-    const box  = document.createElement('div');
-    box.className  = 'team-box' + (lead ? ' leader' : '');
-    box.dataset.id = team.id;
-    box.innerHTML  = `
-      <div class="leader-crown">&#127942; Leading</div>
-      <div class="color-strip" style="background:${col}"></div>
-      <button class="rm-team" data-id="${team.id}">&#215;</button>
-      <input type="text" class="team-name" value="${esc(team.name)}" data-id="${team.id}" placeholder="Team Name">
-      <div class="ctrls">
-        <button class="bscore bminus" data-id="${team.id}" data-dir="-1">&#8722;</button>
-        <div class="score-num" id="sn-${team.id}">${team.score}</div>
-        <button class="bscore bplus"  data-id="${team.id}" data-dir="1">+</button>
-      </div>
-      <div class="steps">
-        ${[1,2,5,10].map(n =>
-          `<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}">&plusmn;${n}</button>`
-        ).join('')}
-      </div>`;
-    grid.appendChild(box);
+
+  // Remove boxes for teams that no longer exist
+  grid.querySelectorAll('.team-box').forEach(box => {
+    if (!localTeams.find(t => String(t.id) === box.dataset.id)) box.remove();
   });
 
-  grid.onclick = e => {
-    const rm = e.target.closest('.rm-team');
-    const bs = e.target.closest('.bscore');
-    const st = e.target.closest('.step');
-    if (rm) removeTeam(parseInt(rm.dataset.id));
-    if (bs) changeScore(parseInt(bs.dataset.id), parseInt(bs.dataset.dir));
-    if (st) setStep(st, parseInt(st.dataset.id), parseInt(st.dataset.step));
-  };
-    grid.onchange = e => {
-    const tn = e.target.closest('.team-name');
-    if (tn) updateTeamName(parseInt(tn.dataset.id), tn.value);
-  };
+  localTeams.forEach((team, idx) => {
+    const col  = team.color || COLORS[idx % COLORS.length];
+    const step = team.step || 1;
+    const lead = team.score === maxScore
+              && localTeams.filter(t => t.score === maxScore).length === 1
+              && maxScore > 0;
+
+    let box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
+
+    if (!box) {
+      // New team — create the full node
+      box = document.createElement('div');
+      box.dataset.id = team.id;
+      box.innerHTML = `
+        <div class="leader-crown">&#127942; Leading</div>
+        <div class="color-strip" style="background:${col}"></div>
+        <button class="rm-team" data-id="${team.id}">&#215;</button>
+        <input type="text" class="team-name" value="${esc(team.name)}" data-id="${team.id}" placeholder="Team Name">
+        <div class="ctrls">
+          <button class="bscore bminus" data-id="${team.id}" data-dir="-1">&#8722;</button>
+          <div class="score-num" id="sn-${team.id}">${team.score}</div>
+          <button class="bscore bplus" data-id="${team.id}" data-dir="1">+</button>
+        </div>
+        <div class="steps">
+          ${[1,2,5,10].map(n=>`<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}">&plusmn;${n}</button>`).join('')}
+        </div>`;
+      grid.appendChild(box);
+    } else {
+      // Existing team — patch only what changed, never touch the focused input
+      const nameEl = box.querySelector('.team-name');
+      if (document.activeElement !== nameEl && nameEl.value !== team.name) nameEl.value = team.name;
+      const scoreEl = box.querySelector('.score-num');
+      if (scoreEl && scoreEl.textContent != team.score) scoreEl.textContent = team.score;
+      // Sync step buttons
+      box.querySelectorAll('.step').forEach(b => b.classList.toggle('on', parseInt(b.dataset.step) === step));
+    }
+
+    // Always sync class and color (safe — doesn't affect focus)
+    box.className = 'team-box' + (lead ? ' leader' : '');
+    const strip = box.querySelector('.color-strip');
+    if (strip) strip.style.background = col;
+  });
+
+  // Ensure order matches localTeams (drag-free reorder)
+  localTeams.forEach((team, idx) => {
+    const box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
+    if (box && grid.children[idx] !== box) grid.insertBefore(box, grid.children[idx] || null);
+  });
+
+  // Attach delegated event handlers once via a flag
+  if (!grid._handlersAttached) {
+    grid._handlersAttached = true;
+    grid.addEventListener('click', e => {
+      const rm = e.target.closest('.rm-team');
+      const bs = e.target.closest('.bscore');
+      const st = e.target.closest('.step');
+      if (rm) removeTeam(parseInt(rm.dataset.id));
+      if (bs) changeScore(parseInt(bs.dataset.id), parseInt(bs.dataset.dir));
+      if (st) setStep(st, parseInt(st.dataset.id), parseInt(st.dataset.step));
+    });
+    grid.addEventListener('change', e => {
+      const tn = e.target.closest('.team-name');
+      if (tn) updateTeamName(parseInt(tn.dataset.id), tn.value);
+    });
+  }
+
   rebuildDomCache();
 }
 
@@ -774,24 +882,17 @@ function changeScore(id, dir) {
   playDing(dir > 0);
   renderLeaders(); updateStats();
 
-  // Atomic server update — prevents lost-update race when 3+ devices tap simultaneously
-  // Finds the team's index in the Firebase array and updates only that score
-  const teamIndex = localTeams.findIndex(x => x.id === id);
-  if (teamIndex === -1) return;
-  runTransaction(ref(db, ROOT + '/teams/' + teamIndex + '/score'), current => {
-    const base = (current === null ? 0 : current);
+  // Atomic score update keyed by team ID (not array index) — immune to concurrent add/delete
+  runTransaction(ref(db, ROOT + '/teams_obj/' + id + '/score'), current => {
+    const base = (current === null ? t.score : current); // null = first write for this team
     return Math.max(0, base + dir * step);
   }).then(result => {
     if (result.committed && result.snapshot.exists()) {
-      // Sync our local value to the committed server value
       t.score = result.snapshot.val();
       if (el) el.textContent = t.score;
       renderLeaders(); updateStats();
     }
-  }).catch(() => {
-    // Transaction failed — push full teams as fallback
-    pushTeamsDebounced();
-  });
+  }).catch(() => { pushTeamsDebounced(); });
 }
 
 let leaderRafPending = false;
@@ -949,8 +1050,20 @@ function updateStats() {
 }
 
 // ══ QR ════════════════════════════════════════════════
+function getShareUrl() {
+  // file:// protocol cannot be shared — detect and warn
+  if (location.protocol === 'file:') return null;
+  // Embed roomId in hash so the same hosted URL can host multiple rooms
+  const base = location.origin + location.pathname;
+  return base + (location.hash || '#' + ROOM_ID);
+}
+
 function openQR() {
-  const url = location.origin + location.pathname;
+  const url = getShareUrl();
+  if (!url) {
+    showToast('⚠️ Host this file on a web server to share via QR');
+    return;
+  }
   document.getElementById('qr-url-text').textContent = url;
   if (!qrGenerated) {
     document.getElementById('qr-box').innerHTML = '';
