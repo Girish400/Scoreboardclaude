@@ -221,14 +221,19 @@ const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.fir
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
+// ── Per-session identity — declared here so setupFirebase() can use it ────────
+const CLIENT_ID   = Math.random().toString(36).slice(2);
+let   localWriteSeq = 0;
+
 // Each room gets its own Firebase path derived from the URL hash.
 // Sharing the URL (including hash) connects others to the same room.
 // A fresh load with no hash generates a new room ID and sets the hash.
+// NOTE: uses window.history explicitly to avoid shadowing by the gameHistory array.
 function getRoomId() {
   const hash = location.hash.replace('#', '').trim();
   if (hash && /^[a-z0-9]{6,16}$/.test(hash)) return hash;
   const newId = Math.random().toString(36).slice(2, 10);
-  history.replaceState(null, '', '#' + newId);
+  window.history.replaceState(null, '', '#' + newId);
   return newId;
 }
 const ROOM_ID = getRoomId();
@@ -308,7 +313,7 @@ function playAlarm() {
 // ══ STATE ═════════════════════════════════════════════
 const COLORS = ['#f5c842','#34d97b','#f07844','#4f8ef7','#a78bfa','#f0504d','#22d3ee'];
 let localTeams    = [];
-let history       = [];
+let gameHistory   = [];
 let roundNum      = 1;
 let timerSecs     = 60;
 let timerLeft     = 60;
@@ -445,7 +450,7 @@ function applyRemoteState(data) {
   }
   // History
   if (data.history) {
-    history = Array.isArray(data.history) ? data.history : Object.values(data.history);
+    gameHistory = Array.isArray(data.history) ? data.history : Object.values(data.history);
     renderHistory();
   }
   // Timer sync
@@ -676,10 +681,8 @@ function showCountdown(n) {
 }
 
 // ══ FIREBASE HELPERS ══════════════════════════════════
-// Stable per-session client ID — written with every push so we can
-// reliably skip our own echoes without a time window race condition.
-const CLIENT_ID = Math.random().toString(36).slice(2);
-let localWriteSeq = 0;  // increments on every push from this device
+// CLIENT_ID and localWriteSeq are declared at the top of the script
+// so they are available when the onValue listener first fires.
 
 function pushRemote(partial) {
   localWriteSeq++;
@@ -704,7 +707,7 @@ function pushAll() {
     round:     roundNum,
     teams:     localTeams,
     teams_obj: obj,
-    history:   history
+    history:   gameHistory
   });
 }
 
@@ -719,7 +722,7 @@ function saveLocal() {
       title:     document.getElementById('game-title').value,
       round:     roundNum,
       teams:     localTeams,
-      history:   history,
+      history:   gameHistory,
       savedAt:   Date.now()
     }));
   } catch(e) {}
@@ -746,7 +749,7 @@ function loadLocal() {
       renderTeams();
     }
     if (d.history) {
-      history = d.history;
+      gameHistory = d.history;
       renderHistory();
     }
     updateStats();
@@ -965,7 +968,7 @@ function saveGame() {
     return h;
   }).then(result => {
     if (result.committed) {
-      history = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : Object.values(result.snapshot.val());
+      gameHistory = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : Object.values(result.snapshot.val());
       renderHistory(); updateStats();
       showToast('Game saved! 💾');
     }
@@ -976,11 +979,11 @@ window.saveGame = saveGame;
 // ══ HISTORY ═══════════════════════════════════════════
 function renderHistory() {
   const el = document.getElementById('hist-list');
-  if (!history.length) {
+  if (!gameHistory.length) {
     el.innerHTML = '<div class="empty">No saved games yet — press Save Game after each round!</div>';
     return;
   }
-  el.innerHTML = history.map((e, i) => {
+  el.innerHTML = gameHistory.map((e, i) => {
     const max   = Math.max(...e.teams.map(t => t.score));
     const chips = e.teams.map(t => {
       const w = t.score === max && e.teams.filter(x => x.score === max).length === 1;
@@ -1006,7 +1009,7 @@ function renderHistory() {
 }
 
 function restoreGame(idx) {
-  const e = history[idx];
+  const e = gameHistory[idx];
   if (!confirm('Restore "' + e.game + '" Round ' + e.round + '?')) return;
   document.getElementById('game-title').value = e.game;
   autoSize(document.getElementById('game-title'));
@@ -1020,7 +1023,7 @@ function restoreGame(idx) {
 
 function delHistory(idx) {
   // Atomic delete by entry ID (not array index which can shift between devices)
-  const entryId = history[idx]?.id;
+  const entryId = gameHistory[idx]?.id;
   if (!entryId) return;
   runTransaction(ref(db, ROOT + '/history'), current => {
     let h = current ? (Array.isArray(current) ? current : Object.values(current)) : [];
@@ -1028,7 +1031,7 @@ function delHistory(idx) {
     return h;
   }).then(result => {
     if (result.committed) {
-      history = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : (result.snapshot.val() ? Object.values(result.snapshot.val()) : []);
+      gameHistory = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : (result.snapshot.val() ? Object.values(result.snapshot.val()) : []);
       renderHistory(); updateStats();
     }
   });
@@ -1044,7 +1047,7 @@ function updateStats() {
     <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${total}</div></div>
     <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:1rem;padding-top:6px">${leader ? esc(leader.name) : '—'}</div></div>
     <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${gap}</div></div>
-    <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${history.length}</div></div>
+    <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${gameHistory.length}</div></div>
     <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
   `;
 }
