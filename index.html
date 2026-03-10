@@ -213,7 +213,8 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 <script type="module">
 import { initializeApp }           from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getDatabase, ref, set,
-         update, onValue }         from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+         update, onValue,
+         runTransaction }            from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
 // ══ FIREBASE ══════════════════════════════════════════
 const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
@@ -227,6 +228,8 @@ let audioCtx = null;
 
 function getAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // Resume if suspended (mobile browsers suspend after ~10 min idle)
+  if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
 }
 
@@ -246,6 +249,7 @@ function playDing(isAdd = true) {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.35);
+    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
   } catch(e) {}
 }
 
@@ -263,6 +267,7 @@ function playBeep(freq = 880) {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.25);
+    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
   } catch(e) {}
 }
 
@@ -283,6 +288,7 @@ function playAlarm() {
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
       osc.start(t);
       osc.stop(t + 0.35);
+      osc.onended = () => { osc.disconnect(); gain.disconnect(); };
     });
   } catch(e) {}
 }
@@ -299,11 +305,11 @@ let timerInt      = null;
 let timerHide     = false;
 let cdBusy        = false;
 let teamCtr       = 0;
-let ignoreRemote  = false;
 let qrGenerated   = false;
 // For synced timer: track server start timestamp
-let timerStartedAt    = null; // server ms timestamp when timer started
-let timerPausedLeft   = null; // ms remaining when paused
+let timerStartedAt    = null; // server ms when timer last started/resumed
+let timerDurationMs   = 60000;// total duration ms for current round
+let timerPausedLeft   = null; // ms remaining when paused (local fallback only)
 let lastSyncedSeconds = -1;   // avoid re-rendering same value
 
 // ══ INIT ══════════════════════════════════════════════
@@ -313,18 +319,38 @@ renderTimerDisplay(timerSecs);
 autoSize(document.getElementById('game-title'));
 setupFirebase();
 
+// ══ SERVER TIME OFFSET ════════════════════════════════
+let serverOffset = 0;
+
+function serverNow() { return Date.now() + serverOffset; }
+
 // ══ FIREBASE SETUP ════════════════════════════════════
 function setupFirebase() {
+  // Sync server time offset for accurate cross-device timer
+  onValue(ref(db, '.info/serverTimeOffset'), snap => {
+    serverOffset = snap.val() || 0;
+  });
+
+  // Mobile audio context resume on first touch
+  document.body.addEventListener('touchstart', () => {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }, { once: true });
+
   onValue(ref(db, '.info/connected'), snap => {
     const on = snap.val();
     document.getElementById('conn-dot').className = 'conn-dot ' + (on ? 'online' : 'offline');
     document.getElementById('conn-text').textContent = on ? 'Connected' : 'Offline — reconnecting…';
   });
 
+  // Track the highest sequence number seen from ourselves so we can
+  // skip echoes of our own writes even if they arrive out-of-order
   onValue(ref(db, ROOT), snap => {
-    if (ignoreRemote) return;
     const data = snap.val();
     if (!data) { pushDefaults(); return; }
+    // Skip our own echo: same clientId AND sequence we already wrote
+    if (data._cid === CLIENT_ID && data._seq && data._seq <= localWriteSeq) {
+      return;
+    }
     applyRemoteState(data);
   }, err => {
     showError('Firebase error: ' + err.message);
@@ -332,15 +358,28 @@ function setupFirebase() {
 }
 
 function pushDefaults() {
-  localTeams = [
-    { id:1, name:'Team 1', score:0, color:COLORS[0] },
-    { id:2, name:'Team 2', score:0, color:COLORS[1] }
-  ];
-  teamCtr = 2;
-  set(ref(db, ROOT), {
-    title: 'Score Board', round: 1,
-    teams: localTeams, history: [],
-    timer: { secs: 60, startedAt: null, pausedLeft: 60000, running: false }
+  // Use a transaction so only the FIRST device to see null initializes the room.
+  // If two devices simultaneously see null, only one wins — the other retries and
+  // finds data already there, so it aborts without overwriting.
+  runTransaction(ref(db, ROOT), current => {
+    if (current !== null) return; // already initialized — abort
+    return {
+      title: 'Score Board', round: 1,
+      teams: [
+        { id:1, name:'Team 1', score:0, color:COLORS[0] },
+        { id:2, name:'Team 2', score:0, color:COLORS[1] }
+      ],
+      history: [],
+      timer: { secs: 60, durationMs: 60000, running: false, startedAt: null, remainingMs: 60000, pausedAt: null }
+    };
+  }).then(result => {
+    if (result.committed) {
+      // We were the initializer — set local state
+      localTeams = result.snapshot.val().teams;
+      teamCtr = 2;
+      renderTeams(); updateStats();
+    }
+    // If not committed, the onValue listener will fire with the existing data
   });
 }
 
@@ -355,11 +394,29 @@ function applyRemoteState(data) {
     roundNum = data.round;
     document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
   }
-  // Teams
+  // Teams — surgical update: only re-render if structure changed (add/remove/rename)
   if (data.teams) {
-    localTeams = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
-    teamCtr = Math.max(...localTeams.map(t => t.id), teamCtr);
-    renderTeams();
+    const incoming = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
+    const structureChanged =
+      incoming.length !== localTeams.length ||
+      incoming.some((t, i) => t.id !== localTeams[i]?.id || t.name !== localTeams[i]?.name || t.color !== localTeams[i]?.color);
+    localTeams = incoming;
+    teamCtr = Math.max(teamCtr, ...localTeams.map(t => t.id || 0));
+    if (structureChanged) {
+      renderTeams();
+    } else {
+      // Only patch scores and leader status — zero DOM thrash
+      const maxScore = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
+      localTeams.forEach(t => {
+        const el  = domCache.scoreEls[t.id]  || document.getElementById('sn-' + t.id);
+        const box = domCache.teamBoxes[t.id] || document.querySelector(`.team-box[data-id="${t.id}"]`);
+        if (el && el.textContent != t.score) el.textContent = t.score;
+        if (box) {
+          const lead = t.score === maxScore && localTeams.filter(x => x.score === maxScore).length === 1 && maxScore > 0;
+          box.classList.toggle('leader', lead);
+        }
+      });
+    }
   }
   // History
   if (data.history) {
@@ -374,35 +431,42 @@ function applyRemoteState(data) {
 }
 
 // ══ TIMER SYNC ════════════════════════════════════════
-// Timer state stored in Firebase:
-//   timer.secs       — total seconds for this round
-//   timer.running    — boolean
-//   timer.startedAt  — server ms timestamp when last started
-//   timer.pausedLeft — ms remaining when paused (used when running=false)
+// Timer schema in Firebase (all timestamps are server ms):
+//   timer.durationMs  — total duration in ms for this round
+//   timer.running     — boolean
+//   timer.startedAt   — server ms when last started/resumed (running=true only)
+//   timer.remainingMs — ms remaining at the moment of pause (running=false only)
+//   timer.pausedAt    — server ms when paused (for deterministic pause race resolution)
+//
+// When running:  remaining = durationMs - (serverNow() - startedAt)  [never stale]
+// When paused:   remaining = remainingMs  [set atomically at pause moment]
 
 function syncTimerFromRemote(t) {
-  timerSecs = t.secs || 60;
+  timerSecs = Math.round((t.durationMs || t.secs * 1000 || 60000) / 1000);
 
   if (t.running && t.startedAt) {
-    // Calculate how much time is left based on server start time
-    const elapsed = Date.now() - t.startedAt;
-    const leftMs  = Math.max(0, (t.pausedLeft || timerSecs * 1000) - elapsed);
-    timerLeft  = Math.round(leftMs / 1000);
-    timerOn    = true;
+    // ALWAYS recompute from server timestamps — never trust local timerPausedLeft
+    const elapsed = serverNow() - t.startedAt;
+    const leftMs  = Math.max(0, (t.durationMs || timerSecs * 1000) - elapsed);
+    timerLeft = Math.floor(leftMs / 1000);
+    timerOn   = true;
+    // Store for local tick use
     timerStartedAt  = t.startedAt;
-    timerPausedLeft = t.pausedLeft;
-    // Start local tick if not already running
-    if (!timerInt) startLocalTick();
-    // Update play/pause buttons
+    timerDurationMs = t.durationMs || timerSecs * 1000;
+    stopLocalTick();
+    lastSyncedSeconds = -1;
+    startLocalTick();
     document.getElementById('t-play').style.display  = 'none';
     document.getElementById('t-pause').style.display = 'flex';
   } else {
-    // Paused or stopped
-    const leftMs = t.pausedLeft !== undefined ? t.pausedLeft : timerSecs * 1000;
-    timerLeft = Math.round(leftMs / 1000);
+    // Paused/stopped — remaining is stored directly (not computed)
+    const leftMs = t.remainingMs !== undefined ? t.remainingMs : (t.pausedLeft !== undefined ? t.pausedLeft : timerSecs * 1000);
+    timerLeft = Math.floor(leftMs / 1000);
     timerOn   = false;
     timerStartedAt  = null;
+    timerDurationMs = t.durationMs || timerSecs * 1000;
     timerPausedLeft = leftMs;
+    lastSyncedSeconds = -1;
     stopLocalTick();
     document.getElementById('t-play').style.display  = 'flex';
     document.getElementById('t-pause').style.display = 'none';
@@ -412,11 +476,11 @@ function syncTimerFromRemote(t) {
 
 function startLocalTick() {
   stopLocalTick();
-  timerInt = setInterval(() => {
-    // Always recompute from server start time for accuracy
-    const elapsed = timerStartedAt ? Date.now() - timerStartedAt : 0;
-    const leftMs  = Math.max(0, (timerPausedLeft || timerSecs * 1000) - elapsed);
-    const secs    = Math.round(leftMs / 1000);
+  function tick() {
+    // When running: always compute from server start + total duration — never stale local state
+    const elapsed = timerStartedAt ? serverNow() - timerStartedAt : 0;
+    const leftMs  = Math.max(0, (timerDurationMs || timerSecs * 1000) - elapsed);
+    const secs    = Math.floor(leftMs / 1000);
 
     if (secs !== lastSyncedSeconds) {
       lastSyncedSeconds = secs;
@@ -435,13 +499,16 @@ function startLocalTick() {
         document.getElementById('t-pause').style.display = 'none';
         playAlarm();
         showCountdown(0);
+        return;
       }
     }
-  }, 250); // poll every 250ms for precision
+    timerInt = requestAnimationFrame(tick);
+  }
+  timerInt = requestAnimationFrame(tick);
 }
 
 function stopLocalTick() {
-  if (timerInt) { clearInterval(timerInt); timerInt = null; }
+  if (timerInt) { cancelAnimationFrame(timerInt); timerInt = null; }
 }
 
 function renderTimerDisplay(secs) {
@@ -454,37 +521,45 @@ function renderTimerDisplay(secs) {
   if (secs <= 3 && secs > 0)  el.classList.add('danger');
 }
 
-function pushTimerState(running) {
-  const pausedLeft = running
-    ? (timerPausedLeft !== null ? timerPausedLeft : timerSecs * 1000)
-    : timerLeft * 1000;
-  const startedAt = running ? Date.now() : null;
-
-  timerStartedAt  = startedAt;
-  timerPausedLeft = pausedLeft;
-
-  pushRemote({
-    timer: {
-      secs:       timerSecs,
-      running:    running,
-      startedAt:  startedAt,
-      pausedLeft: pausedLeft
-    }
-  });
+function pushTimerState(running, overrideRemainingMs) {
+  const now = serverNow();
+  if (running) {
+    const remainingMs = overrideRemainingMs !== undefined ? overrideRemainingMs
+                      : (timerPausedLeft !== null ? timerPausedLeft : timerDurationMs);
+    timerStartedAt  = now;
+    timerDurationMs = remainingMs;
+    timerPausedLeft = null;
+    pushRemote({ timer: {
+      secs: timerSecs, durationMs: remainingMs,
+      running: true, startedAt: now,
+      remainingMs: null, pausedAt: null
+    }});
+  } else {
+    // Compute exact remaining from server timestamps — deterministic across all devices
+    const elapsed   = timerStartedAt ? serverNow() - timerStartedAt : 0;
+    const remaining = Math.max(0, (timerDurationMs || timerSecs * 1000) - elapsed);
+    timerPausedLeft = remaining;
+    timerStartedAt  = null;
+    pushRemote({ timer: {
+      secs: timerSecs, durationMs: timerDurationMs,
+      running: false, startedAt: null,
+      remainingMs: remaining, pausedAt: now
+    }});
+  }
 }
 
 function setPreset(mins, el) {
   document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
   if (el) el.classList.add('on');
   timerSecs       = mins * 60;
+  timerDurationMs = timerSecs * 1000;
   timerLeft       = timerSecs;
-  timerPausedLeft = timerSecs * 1000;
-  stopLocalTick();
-  timerOn = false;
+  timerPausedLeft = timerDurationMs;
+  stopLocalTick(); timerOn = false; lastSyncedSeconds = -1;
   document.getElementById('t-play').style.display  = 'flex';
   document.getElementById('t-pause').style.display = 'none';
   renderTimerDisplay(timerLeft);
-  pushRemote({ timer: { secs: timerSecs, running: false, startedAt: null, pausedLeft: timerSecs * 1000 } });
+  pushRemote({ timer: { secs: timerSecs, durationMs: timerDurationMs, running: false, startedAt: null, remainingMs: timerDurationMs, pausedAt: null } });
 }
 window.setPreset = setPreset;
 
@@ -493,27 +568,28 @@ function setCustomTimer() {
   if (!v || v < 1) return;
   document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
   timerSecs       = v * 60;
+  timerDurationMs = timerSecs * 1000;
   timerLeft       = timerSecs;
-  timerPausedLeft = timerSecs * 1000;
-  stopLocalTick();
-  timerOn = false;
+  timerPausedLeft = timerDurationMs;
+  stopLocalTick(); timerOn = false; lastSyncedSeconds = -1;
   document.getElementById('t-play').style.display  = 'flex';
   document.getElementById('t-pause').style.display = 'none';
   renderTimerDisplay(timerLeft);
-  pushRemote({ timer: { secs: timerSecs, running: false, startedAt: null, pausedLeft: timerSecs * 1000 } });
+  pushRemote({ timer: { secs: timerSecs, durationMs: timerDurationMs, running: false, startedAt: null, remainingMs: timerDurationMs, pausedAt: null } });
 }
 window.setCustomTimer = setCustomTimer;
 
 function startTimer() {
   if (timerOn) return;
-  if (timerLeft <= 0) {
-    timerLeft       = timerSecs;
-    timerPausedLeft = timerSecs * 1000;
+  const remainingMs = timerPausedLeft !== null ? timerPausedLeft : timerDurationMs;
+  if (remainingMs <= 0) {
+    timerDurationMs = timerSecs * 1000;
+    timerPausedLeft = timerDurationMs;
   }
   timerOn = true;
   document.getElementById('t-play').style.display  = 'none';
   document.getElementById('t-pause').style.display = 'flex';
-  pushTimerState(true);
+  pushTimerState(true, timerPausedLeft !== null ? timerPausedLeft : timerDurationMs);
   startLocalTick();
 }
 window.startTimer = startTimer;
@@ -524,7 +600,7 @@ function pauseTimer() {
   stopLocalTick();
   document.getElementById('t-play').style.display  = 'flex';
   document.getElementById('t-pause').style.display = 'none';
-  pushTimerState(false);
+  pushTimerState(false); // computes exact remaining from server timestamps
 }
 window.pauseTimer = pauseTimer;
 
@@ -532,12 +608,14 @@ function resetTimer() {
   stopLocalTick();
   timerOn         = false;
   timerLeft       = timerSecs;
-  timerPausedLeft = timerSecs * 1000;
+  timerDurationMs = timerSecs * 1000;
+  timerPausedLeft = timerDurationMs;
   timerStartedAt  = null;
+  lastSyncedSeconds = -1;
   document.getElementById('t-play').style.display  = 'flex';
   document.getElementById('t-pause').style.display = 'none';
   renderTimerDisplay(timerLeft);
-  pushRemote({ timer: { secs: timerSecs, running: false, startedAt: null, pausedLeft: timerSecs * 1000 } });
+  pushRemote({ timer: { secs: timerSecs, durationMs: timerDurationMs, running: false, startedAt: null, remainingMs: timerDurationMs, pausedAt: null } });
 }
 window.resetTimer = resetTimer;
 
@@ -551,22 +629,37 @@ function toggleTimer() {
 window.toggleTimer = toggleTimer;
 
 function showCountdown(n) {
+  if (cdBusy && n !== 0) return; // don't stack non-finish countdowns
   cdBusy = true;
   const ov = document.getElementById('cdown');
   const nm = document.getElementById('cdown-num');
   nm.textContent = n === 0 ? '🏁' : n;
-  nm.style.animation = 'none'; void nm.offsetWidth;
-  nm.style.animation = 'cPop .85s ease-out forwards';
+  // Clone node to restart animation cleanly without stacking listeners
+  const fresh = nm.cloneNode(true);
+  nm.parentNode.replaceChild(fresh, nm);
+  fresh.style.animation = 'cPop .85s ease-out forwards';
   ov.classList.add('show');
-  setTimeout(() => { ov.classList.remove('show'); cdBusy = false; }, 900);
+  fresh.addEventListener('animationend', () => {
+    ov.classList.remove('show');
+    cdBusy = false;
+  }, { once: true });
+  // Safety fallback in case animationend doesn't fire (hidden tab, etc.)
+  setTimeout(() => { ov.classList.remove('show'); cdBusy = false; }, 950);
 }
 
 // ══ FIREBASE HELPERS ══════════════════════════════════
+// Stable per-session client ID — written with every push so we can
+// reliably skip our own echoes without a time window race condition.
+const CLIENT_ID = Math.random().toString(36).slice(2);
+let localWriteSeq = 0;  // increments on every push from this device
+
 function pushRemote(partial) {
-  ignoreRemote = true;
-  update(ref(db, ROOT), partial).finally(() => {
-    setTimeout(() => { ignoreRemote = false; }, 400);
-  });
+  localWriteSeq++;
+  const seq = localWriteSeq;
+  // Tag every write with our clientId + sequence number
+  partial._cid = CLIENT_ID;
+  partial._seq = seq;
+  update(ref(db, ROOT), partial);
 }
 function pushTeams() { pushRemote({ teams: localTeams }); }
 function pushAll() {
@@ -601,7 +694,7 @@ function renderTeams() {
                && localTeams.filter(t => t.score === maxScore).length === 1
                && maxScore > 0;
     const col  = team.color || COLORS[idx % COLORS.length];
-    const step = stepMap[String(team.id)] || 1;
+    const step = team.step || stepMap[String(team.id)] || 1;
     const box  = document.createElement('div');
     box.className  = 'team-box' + (lead ? ' leader' : '');
     box.dataset.id = team.id;
@@ -631,14 +724,17 @@ function renderTeams() {
     if (bs) changeScore(parseInt(bs.dataset.id), parseInt(bs.dataset.dir));
     if (st) setStep(st, parseInt(st.dataset.id), parseInt(st.dataset.step));
   };
-  grid.onchange = e => {
+    grid.onchange = e => {
     const tn = e.target.closest('.team-name');
     if (tn) updateTeamName(parseInt(tn.dataset.id), tn.value);
   };
+  rebuildDomCache();
 }
 
 function getStep(teamId) {
-  const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
+  const t = localTeams.find(t => t.id === teamId);
+  if (t && t.step) return t.step; // use persisted value first
+  const box = domCache.teamBoxes[teamId] || document.querySelector(`.team-box[data-id="${teamId}"]`);
   const s   = box && box.querySelector('.step.on');
   return s ? parseInt(s.dataset.step) : 1;
 }
@@ -670,22 +766,66 @@ function changeScore(id, dir) {
   const step = getStep(id);
   const t    = localTeams.find(t => t.id === id);
   if (!t) return;
-  t.score += dir * step;
-  const el = document.getElementById('sn-' + id);
+
+  // Optimistic local update for instant UI feedback
+  t.score = Math.max(0, t.score + dir * step);
+  const el = domCache.scoreEls[id] || document.getElementById('sn-' + id);
   if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent = t.score; }
-  // 🔔 Play ding on every score change
   playDing(dir > 0);
-  renderLeaders(); pushTeams(); updateStats();
+  renderLeaders(); updateStats();
+
+  // Atomic server update — prevents lost-update race when 3+ devices tap simultaneously
+  // Finds the team's index in the Firebase array and updates only that score
+  const teamIndex = localTeams.findIndex(x => x.id === id);
+  if (teamIndex === -1) return;
+  runTransaction(ref(db, ROOT + '/teams/' + teamIndex + '/score'), current => {
+    const base = (current === null ? 0 : current);
+    return Math.max(0, base + dir * step);
+  }).then(result => {
+    if (result.committed && result.snapshot.exists()) {
+      // Sync our local value to the committed server value
+      t.score = result.snapshot.val();
+      if (el) el.textContent = t.score;
+      renderLeaders(); updateStats();
+    }
+  }).catch(() => {
+    // Transaction failed — push full teams as fallback
+    pushTeamsDebounced();
+  });
 }
 
+let leaderRafPending = false;
 function renderLeaders() {
-  const max = Math.max(...localTeams.map(t => t.score));
-  document.querySelectorAll('.team-box').forEach(box => {
-    const t    = localTeams.find(x => x.id == box.dataset.id);
-    if (!t) return;
-    const lead = t.score === max && localTeams.filter(x => x.score === max).length === 1 && max > 0;
-    box.classList.toggle('leader', lead);
+  if (leaderRafPending) return;
+  leaderRafPending = true;
+  requestAnimationFrame(() => {
+    leaderRafPending = false;
+    const max = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
+    localTeams.forEach(t => {
+      const box = domCache.teamBoxes[t.id] || document.querySelector(`.team-box[data-id="${t.id}"]`);
+      if (!box) return;
+      const lead = t.score === max && localTeams.filter(x => x.score === max).length === 1 && max > 0;
+      box.classList.toggle('leader', lead);
+    });
   });
+}
+
+// ══ DOM ELEMENT CACHE ═════════════════════════════════
+// Rebuilt whenever renderTeams() runs — eliminates repeated getElementById/querySelectorAll
+const domCache = { scoreEls: {}, teamBoxes: {} };
+
+function rebuildDomCache() {
+  domCache.scoreEls = {};
+  domCache.teamBoxes = {};
+  localTeams.forEach(t => {
+    domCache.scoreEls[t.id]  = document.getElementById('sn-' + t.id);
+    domCache.teamBoxes[t.id] = document.querySelector(`.team-box[data-id="${t.id}"]`);
+  });
+}
+let teamPushTimer = null;
+function pushTeamsDebounced() {
+  clearTimeout(teamPushTimer);
+  teamPushTimer = setTimeout(() => pushTeams(), 120);
 }
 
 function setStep(btn, teamId, n) {
@@ -693,6 +833,8 @@ function setStep(btn, teamId, n) {
   if (!box) return;
   box.querySelectorAll('.step').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
+  const t = localTeams.find(t => t.id === teamId);
+  if (t) { t.step = n; pushTeamsDebounced(); }
 }
 
 function resetAll() {
@@ -714,10 +856,19 @@ function saveGame() {
     round: roundNum,
     teams: localTeams.map(t => ({...t}))
   };
-  history.unshift(entry);
-  if (history.length > 60) history = history.slice(0, 60);
-  pushAll(); renderHistory(); updateStats();
-  showToast('Game saved! 💾');
+  // Atomic prepend — safe when multiple devices save simultaneously
+  runTransaction(ref(db, ROOT + '/history'), current => {
+    let h = current ? (Array.isArray(current) ? current : Object.values(current)) : [];
+    h.unshift(entry);
+    if (h.length > 60) h = h.slice(0, 60);
+    return h;
+  }).then(result => {
+    if (result.committed) {
+      history = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : Object.values(result.snapshot.val());
+      renderHistory(); updateStats();
+      showToast('Game saved! 💾');
+    }
+  });
 }
 window.saveGame = saveGame;
 
@@ -759,7 +910,7 @@ function restoreGame(idx) {
   document.getElementById('game-title').value = e.game;
   autoSize(document.getElementById('game-title'));
   localTeams = e.teams.map(t => ({...t}));
-  teamCtr    = Math.max(...localTeams.map(t => t.id), teamCtr);
+  teamCtr    = Math.max(teamCtr, ...localTeams.map(t => t.id || 0));
   roundNum   = e.round;
   document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
   renderTeams(); pushAll(); updateStats();
@@ -767,8 +918,19 @@ function restoreGame(idx) {
 }
 
 function delHistory(idx) {
-  history.splice(idx, 1);
-  pushRemote({ history }); renderHistory(); updateStats();
+  // Atomic delete by entry ID (not array index which can shift between devices)
+  const entryId = history[idx]?.id;
+  if (!entryId) return;
+  runTransaction(ref(db, ROOT + '/history'), current => {
+    let h = current ? (Array.isArray(current) ? current : Object.values(current)) : [];
+    h = h.filter(e => e.id !== entryId);
+    return h;
+  }).then(result => {
+    if (result.committed) {
+      history = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : (result.snapshot.val() ? Object.values(result.snapshot.val()) : []);
+      renderHistory(); updateStats();
+    }
+  });
 }
 
 // ══ STATS ═════════════════════════════════════════════
@@ -788,7 +950,7 @@ function updateStats() {
 
 // ══ QR ════════════════════════════════════════════════
 function openQR() {
-  const url = window.location.href;
+  const url = location.origin + location.pathname;
   document.getElementById('qr-url-text').textContent = url;
   if (!qrGenerated) {
     document.getElementById('qr-box').innerHTML = '';
