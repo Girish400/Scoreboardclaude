@@ -7,11 +7,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
+/* ── TOKENS ─────────────────────────────────────────── */
 :root{
-  --bg:#080a0f;--surface:#10131a;--surface2:#181c26;
-  --border:#1e2330;--border2:#252c3d;
-  --gold:#f5c842;--green:#34d97b;--red:#f0504d;
-  --blue:#4f8ef7;--orange:#f07844;--text:#eef0f8;--muted:#5a6180;--r:16px;
+  --bg:#080a0f; --surface:#10131a; --surface2:#181c26;
+  --border:#1e2330; --border2:#252c3d;
+  --gold:#f5c842; --green:#34d97b; --red:#f0504d;
+  --blue:#4f8ef7; --purple:#a78bfa; --orange:#f07844;
+  --text:#eef0f8; --muted:#5a6180; --r:16px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
@@ -19,135 +21,245 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(245,200,66,.07),transparent 70%);pointer-events:none;z-index:0;}
 .wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:24px 16px 80px;}
 
-/* HEADER */
-.header{text-align:center;margin-bottom:28px;}
+/* ── MODALS (shared base) ───────────────────────────── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:2000;opacity:0;pointer-events:none;transition:opacity .3s;}
+.modal-bg.show{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:24px;padding:36px 32px;text-align:center;max-width:380px;width:92%;}
+.modal h2{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:3px;color:var(--gold);margin-bottom:8px;}
+.modal p{font-size:.85rem;color:var(--muted);margin-bottom:22px;line-height:1.5;}
+.modal-close{background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 28px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.9rem;transition:all .2s;}
+.modal-close:hover{background:var(--red);border-color:var(--red);}
+
+/* ── JOIN MODAL ─────────────────────────────────────── */
+#join-modal .modal{max-width:420px;}
+.join-field{width:100%;background:var(--surface2);border:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:1.1rem;padding:13px 16px;border-radius:12px;outline:none;text-align:center;transition:border-color .2s;margin-bottom:10px;}
+.join-field:focus{border-color:var(--gold);}
+.join-field.err{border-color:var(--red);}
+.field-err{color:var(--red);font-size:.8rem;min-height:18px;margin-bottom:12px;text-align:left;}
+.btn-join{width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;transition:filter .2s;}
+.btn-join:hover{filter:brightness(1.1);}
+.btn-join:disabled{opacity:.5;cursor:not-allowed;}
+
+/* ── LOBBY VIEW ─────────────────────────────────────── */
+#lobby-view{display:none;}
+.lobby-header{text-align:center;margin-bottom:32px;}
+.lobby-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.8rem,9vw,5rem);letter-spacing:5px;color:var(--gold);text-shadow:0 0 40px rgba(245,200,66,.3);}
+.lobby-sub{color:var(--muted);font-size:.9rem;margin-top:6px;}
+.lobby-room{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 20px;margin-top:14px;font-size:.8rem;color:var(--muted);}
+.lobby-room code{color:var(--gold);font-size:.9rem;letter-spacing:2px;}
+.section-label{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:2px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+.players-list{display:flex;flex-direction:column;gap:8px;margin-bottom:28px;}
+.player-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;transition:border-color .2s;}
+.player-row.you{border-color:var(--gold);}
+.player-row.host-row{border-color:var(--purple);}
+.player-avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;}
+.player-name-lobby{font-weight:600;font-size:.95rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.player-badge{font-size:.7rem;padding:3px 10px;border-radius:50px;background:var(--surface2);border:1px solid var(--border2);color:var(--muted);white-space:nowrap;}
+.player-badge.host-badge{background:rgba(167,139,250,.15);border-color:var(--purple);color:var(--purple);}
+.player-badge.you-badge{background:rgba(245,200,66,.12);border-color:var(--gold);color:var(--gold);}
+.lobby-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:28px;}
+.btn-lobby{padding:12px 24px;border:none;border-radius:50px;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:8px;}
+.btn-lobby:hover{transform:translateY(-2px);filter:brightness(1.12);}
+.btn-lobby:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none;}
+.b-start{background:var(--green);color:#000;}
+.b-qr-lobby{background:var(--blue);color:#fff;}
+.b-new-game{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
+.waiting-msg{text-align:center;color:var(--muted);font-size:.9rem;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;}
+.waiting-msg span{display:block;font-size:1.4rem;margin-bottom:6px;}
+
+/* ── GAME VIEW ──────────────────────────────────────── */
+#game-view{display:none;}
+.header{text-align:center;margin-bottom:24px;}
 .title-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;}
-#game-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.6rem,8vw,4.8rem);letter-spacing:4px;color:var(--gold);background:transparent;border:none;outline:none;text-align:center;width:auto;min-width:40px;cursor:text;text-shadow:0 0 40px rgba(245,200,66,.3);}
+#game-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.4rem,7vw,4.4rem);letter-spacing:4px;color:var(--gold);background:transparent;border:none;outline:none;text-align:center;width:auto;min-width:40px;cursor:text;text-shadow:0 0 40px rgba(245,200,66,.3);}
 .edit-ico{color:var(--muted);cursor:pointer;font-size:1rem;transition:color .2s;}
 .edit-ico:hover{color:var(--gold);}
-.meta{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:6px;}
+.meta{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:6px;}
 .meta span{display:flex;align-items:center;gap:5px;}
 
-/* CONNECTION */
-.conn-bar{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 18px;margin:0 auto 22px;width:fit-content;font-size:.8rem;color:var(--muted);}
+/* ── STATE BADGE ────────────────────────────────────── */
+.state-bar{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+.state-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:50px;font-size:.8rem;font-weight:700;letter-spacing:.5px;}
+.state-badge.lobby{background:rgba(79,142,247,.15);border:1px solid var(--blue);color:var(--blue);}
+.state-badge.active{background:rgba(52,217,123,.15);border:1px solid var(--green);color:var(--green);}
+.state-badge.finished{background:rgba(245,200,66,.15);border:1px solid var(--gold);color:var(--gold);}
+.state-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.4s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.state-badge.finished .state-dot{animation:none;}
+
+/* ── TURN BANNER ────────────────────────────────────── */
+.turn-banner{border-radius:14px;padding:14px 20px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+.turn-banner.your-turn{background:rgba(52,217,123,.12);border:1.5px solid var(--green);}
+.turn-banner.other-turn{background:var(--surface);border:1px solid var(--border);}
+.turn-banner.finished-banner{background:rgba(245,200,66,.08);border:1px solid var(--gold);}
+.turn-who{font-weight:700;font-size:1rem;}
+.turn-who .turn-name{color:var(--green);}
+.turn-who .other-name{color:var(--gold);}
+.turn-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.btn-turn{padding:8px 16px;border-radius:50px;border:none;font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-turn:hover{filter:brightness(1.1);}
+.btn-end-turn{background:var(--green);color:#000;}
+.btn-skip{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
+.btn-undo{background:rgba(240,80,77,.15);color:var(--red);border:1px solid var(--red);}
+.btn-end-game{background:var(--red);color:#fff;}
+.btn-new-game-sm{background:var(--gold);color:#000;}
+
+/* ── CONNECTION ─────────────────────────────────────── */
+.conn-bar{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:6px 16px;margin:0 auto 18px;width:fit-content;font-size:.78rem;color:var(--muted);}
 .conn-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .4s;}
 .conn-dot.online{background:var(--green);}
 .conn-dot.offline{background:var(--red);}
 
-/* TIMER */
-.timer-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 22px;margin-bottom:22px;display:flex;align-items:center;flex-wrap:wrap;gap:14px;}
-.timer-display{font-family:'Bebas Neue',sans-serif;font-size:3rem;letter-spacing:5px;color:var(--text);min-width:105px;transition:color .3s;}
+/* ── TIMER ──────────────────────────────────────────── */
+.timer-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
+.timer-display{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:5px;color:var(--text);min-width:100px;transition:color .3s;}
 .timer-display.warn{color:var(--orange);}
 .timer-display.danger{color:var(--red);animation:blink .5s infinite alternate;}
 @keyframes blink{from{opacity:1}to{opacity:.3}}
-.t-presets{display:flex;gap:8px;flex-wrap:wrap;}
-.t-pre{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.8rem;font-family:'DM Sans',sans-serif;padding:6px 13px;border-radius:50px;cursor:pointer;transition:all .2s;}
+.t-presets{display:flex;gap:7px;flex-wrap:wrap;}
+.t-pre{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.78rem;font-family:'DM Sans',sans-serif;padding:5px 12px;border-radius:50px;cursor:pointer;transition:all .2s;}
 .t-pre:hover,.t-pre.on{background:var(--gold);color:#000;border-color:var(--gold);}
-.t-custom{display:flex;align-items:center;gap:6px;}
-.t-custom input{width:56px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:6px 8px;border-radius:8px;font-size:.8rem;text-align:center;font-family:'DM Sans',sans-serif;outline:none;}
-.tico{width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;transition:transform .15s;}
+.t-custom{display:flex;align-items:center;gap:5px;}
+.t-custom input{width:52px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:5px 8px;border-radius:8px;font-size:.78rem;text-align:center;font-family:'DM Sans',sans-serif;outline:none;}
+.tico{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;font-size:.95rem;display:flex;align-items:center;justify-content:center;transition:transform .15s;}
 .tico:hover{transform:scale(1.1);}
 .t-play{background:var(--green);color:#000;}
 .t-pause{background:var(--gold);color:#000;}
 .t-rst{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
-.t-hide{margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);padding:6px 14px;border-radius:50px;font-size:.78rem;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;}
+.t-hide{margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);padding:5px 13px;border-radius:50px;font-size:.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;}
 .t-hide:hover{border-color:var(--gold);color:var(--gold);}
 
-/* COUNTDOWN OVERLAY */
-.cdown{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:2000;opacity:0;pointer-events:none;transition:opacity .25s;}
-.cdown.show{opacity:1;pointer-events:all;}
-.cdown-num{font-family:'Bebas Neue',sans-serif;font-size:22vw;color:var(--gold);}
-@keyframes cPop{0%{transform:scale(2);opacity:0}25%{transform:scale(1);opacity:1}75%{transform:scale(1);opacity:1}100%{transform:scale(.5);opacity:0}}
-
-/* TEAMS */
-#teams-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-bottom:22px;}
-.team-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:26px 18px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;position:relative;transition:border-color .3s,box-shadow .3s,transform .2s;}
+/* ── TEAMS GRID ─────────────────────────────────────── */
+#teams-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:20px;}
+.team-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px 16px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;transition:border-color .3s,box-shadow .3s,transform .2s;}
 .team-box:hover{transform:translateY(-2px);}
 .team-box.leader{border-color:var(--gold);box-shadow:0 0 50px rgba(245,200,66,.15),inset 0 0 30px rgba(245,200,66,.04);}
-.leader-crown{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.68rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:3px 14px;border-radius:50px;white-space:nowrap;opacity:0;transition:opacity .3s;}
+.team-box.my-turn-box{border-color:var(--green);box-shadow:0 0 30px rgba(52,217,123,.12);}
+.leader-crown{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.66rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:3px 13px;border-radius:50px;white-space:nowrap;opacity:0;transition:opacity .3s;}
 .team-box.leader .leader-crown{opacity:1;}
 .color-strip{position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--r) var(--r) 0 0;}
-.rm-team{position:absolute;top:14px;right:14px;background:none;border:1px solid var(--border2);color:var(--muted);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.9rem;transition:all .2s;}
+.rm-team{position:absolute;top:12px;right:12px;background:none;border:1px solid var(--border2);color:var(--muted);width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:.85rem;transition:all .2s;display:flex;align-items:center;justify-content:center;}
 .rm-team:hover{background:var(--red);border-color:var(--red);color:#fff;}
-.team-name{background:transparent;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.25rem;text-align:center;width:82%;outline:none;padding-bottom:5px;transition:border-color .2s;}
-.team-name:focus{border-bottom-color:var(--gold);}
+.team-name-disp{font-weight:700;font-size:1.15rem;text-align:center;max-width:90%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);}
+.team-name-inp{background:transparent;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.1rem;text-align:center;width:86%;outline:none;padding-bottom:4px;transition:border-color .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.team-name-inp:focus{border-bottom-color:var(--gold);}
+.team-name-inp:disabled{opacity:.6;cursor:not-allowed;}
 .ctrls{display:flex;align-items:center;justify-content:space-between;width:100%;}
-.score-num{font-family:'Bebas Neue',sans-serif;font-size:5.5rem;line-height:1;color:var(--text);flex:1;text-align:center;}
+.score-num{font-family:'Bebas Neue',sans-serif;font-size:5rem;line-height:1;color:var(--text);flex:1;text-align:center;}
 .score-num.pop{animation:sPop .18s ease-out;}
 @keyframes sPop{0%{transform:scale(1.3)}100%{transform:scale(1)}}
-.bscore{width:66px;height:66px;border-radius:50%;border:none;font-size:1.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .2s;}
+.bscore{width:60px;height:60px;border-radius:50%;border:none;font-size:1.7rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .2s,opacity .2s;}
 .bscore:active{transform:scale(.86);}
+.bscore:disabled{opacity:.25;cursor:not-allowed;transform:none;}
 .bminus{background:rgba(240,80,77,.12);color:var(--red);border:1.5px solid var(--red);}
-.bminus:hover{background:var(--red);color:#fff;}
+.bminus:hover:not(:disabled){background:var(--red);color:#fff;}
 .bplus{background:rgba(52,217,123,.12);color:var(--green);border:1.5px solid var(--green);}
-.bplus:hover{background:var(--green);color:#000;}
-.steps{display:flex;gap:6px;justify-content:center;}
-.step{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.74rem;padding:4px 10px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.bplus:hover:not(:disabled){background:var(--green);color:#000;}
+.steps{display:flex;gap:5px;justify-content:center;}
+.step{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.72rem;padding:3px 9px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
 .step:hover,.step.on{background:var(--gold);color:#000;border-color:var(--gold);}
+.step:disabled{opacity:.3;cursor:not-allowed;}
+.lock-msg{font-size:.72rem;color:var(--muted);text-align:center;min-height:16px;}
+.lock-msg.your{color:var(--green);font-weight:600;}
 
-/* ACTION BAR */
-.action-bar{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:24px;}
-.btn-a{padding:12px 22px;border:none;border-radius:50px;cursor:pointer;font-size:.9rem;font-weight:600;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:7px;transition:all .2s;}
+/* ── ACTION BAR ─────────────────────────────────────── */
+.action-bar{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-bottom:22px;}
+.btn-a{padding:11px 20px;border:none;border-radius:50px;cursor:pointer;font-size:.88rem;font-weight:600;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;transition:all .2s;}
 .btn-a:hover{transform:translateY(-2px);filter:brightness(1.12);}
+.btn-a:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none;}
 .b-add{background:var(--gold);color:#000;}
 .b-save{background:var(--green);color:#000;}
 .b-reset{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
 .b-qr{background:var(--blue);color:#fff;}
 
-/* STATS */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:24px;}
-.stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;}
-.stat-l{font-size:.68rem;text-transform:uppercase;letter-spacing:1.8px;color:var(--muted);margin-bottom:4px;}
-.stat-v{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:1px;}
+/* ── STATS ──────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:22px;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;}
+.stat-l{font-size:.66rem;text-transform:uppercase;letter-spacing:1.8px;color:var(--muted);margin-bottom:4px;}
+.stat-v{font-family:'Bebas Neue',sans-serif;font-size:1.7rem;letter-spacing:1px;}
 
-/* QR MODAL */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:1500;opacity:0;pointer-events:none;transition:opacity .3s;}
-.modal-bg.show{opacity:1;pointer-events:all;}
-.modal{background:var(--surface);border:1px solid var(--border2);border-radius:24px;padding:32px 28px;text-align:center;max-width:340px;width:90%;}
-.modal h2{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:2px;color:var(--gold);margin-bottom:6px;}
-.modal p{font-size:.82rem;color:var(--muted);margin-bottom:20px;}
-#qr-box{display:flex;justify-content:center;margin-bottom:18px;}
-#qr-box canvas,#qr-box img{border-radius:12px;}
-.qr-url{font-size:.72rem;color:var(--muted);word-break:break-all;margin-bottom:18px;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);}
-.modal-close{background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 28px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.9rem;transition:all .2s;}
-.modal-close:hover{background:var(--red);border-color:var(--red);}
-
-/* HISTORY */
-.section-hd{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:2px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:12px;}
+/* ── HISTORY ────────────────────────────────────────── */
+.section-hd{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:2px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
 .section-hd::after{content:'';flex:1;height:1px;background:var(--border);}
-.hist-list{display:flex;flex-direction:column;gap:10px;}
-.hist-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:all .2s;}
+.hist-list{display:flex;flex-direction:column;gap:9px;}
+.hist-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:13px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;transition:all .2s;}
 .hist-card:hover{border-color:var(--border2);transform:translateX(4px);}
-.hist-date{font-size:.76rem;color:var(--muted);min-width:120px;}
-.hist-name{font-weight:700;font-size:.95rem;color:var(--gold);flex:1;min-width:100px;}
-.hist-chips{display:flex;gap:8px;flex-wrap:wrap;}
-.chip{background:var(--surface2);border:1px solid var(--border2);border-radius:50px;padding:3px 12px;font-size:.78rem;font-weight:600;white-space:nowrap;}
+.hist-date{font-size:.74rem;color:var(--muted);min-width:110px;}
+.hist-name{font-weight:700;font-size:.92rem;color:var(--gold);flex:1;min-width:90px;}
+.hist-chips{display:flex;gap:7px;flex-wrap:wrap;}
+.chip{background:var(--surface2);border:1px solid var(--border2);border-radius:50px;padding:3px 11px;font-size:.76rem;font-weight:600;white-space:nowrap;}
 .chip.win{background:rgba(245,200,66,.12);border-color:var(--gold);color:var(--gold);}
-.hist-restore{background:none;border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:50px;font-size:.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .2s;}
+.hist-restore{background:none;border:1px solid var(--border2);color:var(--muted);padding:5px 11px;border-radius:50px;font-size:.73rem;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .2s;}
 .hist-restore:hover{border-color:var(--gold);color:var(--gold);}
-.hist-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.95rem;padding:4px;transition:color .2s;}
+.hist-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.92rem;padding:4px;transition:color .2s;}
 .hist-del:hover{color:var(--red);}
-.empty{color:var(--muted);text-align:center;padding:28px;font-size:.85rem;}
+.empty{color:var(--muted);text-align:center;padding:26px;font-size:.84rem;}
 
-/* TOAST */
-.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(90px);background:var(--green);color:#000;font-weight:700;padding:11px 24px;border-radius:50px;font-size:.88rem;z-index:3000;transition:transform .3s;pointer-events:none;}
+/* ── FINISHED VIEW ──────────────────────────────────── */
+#finished-view{display:none;}
+.podium{display:flex;flex-direction:column;gap:12px;margin:20px 0 32px;}
+.podium-card{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;transition:border-color .3s;}
+.podium-card.rank-1{border-color:var(--gold);background:rgba(245,200,66,.05);}
+.podium-card.rank-2{border-color:#9ca3af;}
+.podium-card.rank-3{border-color:#b45309;}
+.podium-rank{font-family:'Bebas Neue',sans-serif;font-size:2rem;width:38px;text-align:center;}
+.rank-1 .podium-rank{color:var(--gold);}
+.rank-2 .podium-rank{color:#9ca3af;}
+.rank-3 .podium-rank{color:#b45309;}
+.podium-avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0;}
+.podium-name{font-weight:700;font-size:1.05rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.podium-score{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;color:var(--text);}
+.finished-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:28px;}
+
+/* ── QR MODAL ───────────────────────────────────────── */
+#qr-modal .modal{max-width:340px;}
+#qr-modal h2{font-size:1.8rem;}
+#qr-box{display:flex;justify-content:center;margin-bottom:16px;}
+#qr-box canvas,#qr-box img{border-radius:12px;}
+.qr-url{font-size:.7rem;color:var(--muted);word-break:break-all;margin-bottom:16px;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);}
+
+/* ── COUNTDOWN OVERLAY ──────────────────────────────── */
+.cdown{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:3000;opacity:0;pointer-events:none;transition:opacity .25s;}
+.cdown.show{opacity:1;pointer-events:all;}
+.cdown-num{font-family:'Bebas Neue',sans-serif;font-size:22vw;color:var(--gold);}
+@keyframes cPop{0%{transform:scale(2);opacity:0}25%{transform:scale(1);opacity:1}75%{transform:scale(1);opacity:1}100%{transform:scale(.5);opacity:0}}
+
+/* ── TOAST / ERROR ──────────────────────────────────── */
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(90px);background:var(--green);color:#000;font-weight:700;padding:10px 22px;border-radius:50px;font-size:.86rem;z-index:4000;transition:transform .3s;pointer-events:none;max-width:90vw;text-align:center;}
 .toast.show{transform:translateX(-50%) translateY(0);}
-
-/* ERROR BANNER */
-.err-banner{background:rgba(240,80,77,.15);border:1px solid var(--red);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:.85rem;color:#f9b0af;display:none;}
+.toast.err{background:var(--red);color:#fff;}
+.err-banner{background:rgba(240,80,77,.15);border:1px solid var(--red);border-radius:12px;padding:12px 16px;margin-bottom:18px;font-size:.83rem;color:#f9b0af;display:none;}
 .err-banner.show{display:block;}
 
-@media(max-width:480px){.timer-panel{flex-direction:column;align-items:flex-start;}.t-hide{margin-left:0;}}
+@media(max-width:480px){
+  .timer-panel{flex-direction:column;align-items:flex-start;}
+  .t-hide{margin-left:0;}
+  .turn-banner{flex-direction:column;align-items:flex-start;}
+}
 </style>
 </head>
 <body>
 
+<!-- ── COUNTDOWN OVERLAY ───────────────────────── -->
 <div class="cdown" id="cdown"><div class="cdown-num" id="cdown-num">3</div></div>
 
+<!-- ── JOIN MODAL ─────────────────────────────── -->
+<div class="modal-bg show" id="join-modal">
+  <div class="modal">
+    <h2>🎮 Join Game</h2>
+    <p>Enter your name to join the scoreboard.<br>You'll keep this name for the whole game.</p>
+    <input class="join-field" id="join-name" type="text" placeholder="Your name…" maxlength="30" autocomplete="off">
+    <div class="field-err" id="join-err"></div>
+    <button class="btn-join" id="btn-join-ok">Join →</button>
+  </div>
+</div>
+
+<!-- ── QR MODAL ───────────────────────────────── -->
 <div class="modal-bg" id="qr-modal">
   <div class="modal">
-    <h2>&#128242; Join Live</h2>
-    <p>Scan to view &amp; control the scoreboard on any device</p>
+    <h2>📱 Join Live</h2>
+    <p>Scan to join this scoreboard on any device</p>
     <div id="qr-box"></div>
     <div class="qr-url" id="qr-url-text"></div>
     <button class="modal-close" onclick="closeQR()">Close</button>
@@ -159,72 +271,135 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 <div class="wrap">
   <div class="err-banner" id="err-banner"></div>
 
-  <div class="header">
-    <div class="title-row">
-      <input id="game-title" value="Score Board" size="12" oninput="autoSize(this);syncTitle()" title="Click to rename">
-      <span class="edit-ico" onclick="document.getElementById('game-title').focus()">&#9998;</span>
+  <!-- ═══════════════════════════════════════════
+       LOBBY VIEW
+  ═══════════════════════════════════════════ -->
+  <div id="lobby-view">
+    <div class="lobby-header">
+      <div class="lobby-title">Score Board Live</div>
+      <div class="lobby-sub">Waiting for players to join…</div>
+      <div class="lobby-room">Room: <code id="lobby-room-code"></code></div>
     </div>
-    <div class="meta">
-      <span>&#128197; <span id="date-disp"></span></span>
-      <span>&#128336; <span id="time-disp"></span></span>
-      <span id="round-disp">&#127918; Round 1</span>
+
+    <div class="conn-bar" style="margin-bottom:22px;">
+      <div class="conn-dot" id="conn-dot-lobby"></div>
+      <span id="conn-text-lobby">Connecting…</span>
+    </div>
+
+    <div class="section-label">Players in lobby</div>
+    <div class="players-list" id="players-list"></div>
+
+    <div class="waiting-msg" id="waiting-msg" style="display:none;">
+      <span>⏳</span>Waiting for the host to start the game…
+    </div>
+
+    <div class="lobby-actions">
+      <button class="btn-lobby b-start" id="btn-start-game" style="display:none;" onclick="hostStartGame()">
+        ▶ Start Game
+      </button>
+      <button class="btn-lobby b-qr-lobby" onclick="openQR()">📱 Share QR</button>
+      <button class="btn-lobby b-new-game" id="btn-new-lobby" style="display:none;" onclick="hostNewGame()">↺ New Game</button>
     </div>
   </div>
 
-  <div class="conn-bar">
-    <div class="conn-dot" id="conn-dot"></div>
-    <span id="conn-text">Connecting&hellip;</span>
-  </div>
-
-  <div class="timer-panel" id="timer-panel">
-    <div class="timer-display" id="timer-disp">00:00</div>
-    <div class="t-presets">
-      <div class="t-pre on" onclick="setPreset(1,this)">1 min</div>
-      <div class="t-pre" onclick="setPreset(2,this)">2 min</div>
-      <div class="t-pre" onclick="setPreset(3,this)">3 min</div>
-      <div class="t-pre" onclick="setPreset(5,this)">5 min</div>
-      <div class="t-pre" onclick="setPreset(10,this)">10 min</div>
-      <div class="t-custom">
-        <input type="number" id="t-custom-inp" placeholder="mm" min="1" max="99" oninput="setCustomTimer()">
-        <span style="color:var(--muted);font-size:.8rem">min</span>
+  <!-- ═══════════════════════════════════════════
+       GAME VIEW
+  ═══════════════════════════════════════════ -->
+  <div id="game-view">
+    <div class="header">
+      <div class="title-row">
+        <input id="game-title" value="Score Board" size="12"
+               oninput="autoSize(this);syncTitle()" title="Click to rename">
+        <span class="edit-ico" id="edit-ico" onclick="document.getElementById('game-title').focus()">✎</span>
+      </div>
+      <div class="meta">
+        <span>📅 <span id="date-disp"></span></span>
+        <span>🕐 <span id="time-disp"></span></span>
+        <span id="round-disp">🎮 Round 1</span>
       </div>
     </div>
-    <button class="tico t-play"  id="t-play"  onclick="startTimer()" title="Start">&#9654;</button>
-    <button class="tico t-pause" id="t-pause" onclick="pauseTimer()" title="Pause" style="display:none">&#9646;&#9646;</button>
-    <button class="tico t-rst"                onclick="resetTimer()"  title="Reset">&#8635;</button>
-    <button class="t-hide" onclick="toggleTimer()">Hide Timer</button>
+
+    <div class="state-bar">
+      <div class="state-badge active" id="state-badge">
+        <span class="state-dot"></span>
+        <span id="state-label">Active</span>
+      </div>
+      <div class="conn-bar" style="margin:0;">
+        <div class="conn-dot" id="conn-dot"></div>
+        <span id="conn-text">Connecting…</span>
+      </div>
+    </div>
+
+    <!-- Turn banner -->
+    <div class="turn-banner other-turn" id="turn-banner">
+      <div class="turn-who" id="turn-who">Loading…</div>
+      <div class="turn-actions" id="turn-actions"></div>
+    </div>
+
+    <!-- Timer -->
+    <div class="timer-panel" id="timer-panel">
+      <div class="timer-display" id="timer-disp">00:00</div>
+      <div class="t-presets">
+        <div class="t-pre on" onclick="setPreset(1,this)">1 min</div>
+        <div class="t-pre" onclick="setPreset(2,this)">2 min</div>
+        <div class="t-pre" onclick="setPreset(3,this)">3 min</div>
+        <div class="t-pre" onclick="setPreset(5,this)">5 min</div>
+        <div class="t-pre" onclick="setPreset(10,this)">10 min</div>
+        <div class="t-custom">
+          <input type="number" id="t-custom-inp" placeholder="mm" min="1" max="99" oninput="setCustomTimer()">
+          <span style="color:var(--muted);font-size:.78rem">min</span>
+        </div>
+      </div>
+      <button class="tico t-play"  id="t-play"  onclick="startTimer()" title="Start">▶</button>
+      <button class="tico t-pause" id="t-pause" onclick="pauseTimer()" title="Pause" style="display:none">⏸</button>
+      <button class="tico t-rst"               onclick="resetTimer()"  title="Reset">↺</button>
+      <button class="t-hide" onclick="toggleTimer()">Hide Timer</button>
+    </div>
+
+    <div id="teams-grid"></div>
+
+    <div class="action-bar" id="action-bar">
+      <button class="btn-a b-add"  id="btn-add"   onclick="addTeamUI()">+ Add Team</button>
+      <button class="btn-a b-save" id="btn-save"  onclick="saveGame()">💾 Save Game</button>
+      <button class="btn-a b-reset" id="btn-reset" onclick="resetAll()">↺ Reset Scores</button>
+      <button class="btn-a b-qr"               onclick="openQR()">📱 Share QR</button>
+    </div>
+
+    <div class="stats" id="stats"></div>
+    <div class="section-hd">Game History</div>
+    <div class="hist-list" id="hist-list"></div>
   </div>
 
-  <div id="teams-grid"></div>
-
-  <div class="action-bar">
-    <button class="btn-a b-add"   onclick="addTeamUI()">+ Add Team</button>
-    <button class="btn-a b-save"  onclick="saveGame()">&#128190; Save Game</button>
-    <button class="btn-a b-reset" onclick="resetAll()">&#8635; Reset Scores</button>
-    <button class="btn-a b-qr"    onclick="openQR()">&#128242; Share QR</button>
+  <!-- ═══════════════════════════════════════════
+       FINISHED VIEW
+  ═══════════════════════════════════════════ -->
+  <div id="finished-view">
+    <div class="header" style="margin-bottom:16px;">
+      <div class="lobby-title" style="font-size:clamp(2rem,7vw,4rem);">🏁 Game Over!</div>
+      <div class="lobby-sub" id="finished-sub">Final Scores</div>
+    </div>
+    <div class="podium" id="podium"></div>
+    <div class="finished-actions">
+      <button class="btn-lobby b-start" id="btn-new-finished" onclick="hostNewGame()">↺ New Game</button>
+      <button class="btn-lobby b-qr-lobby" onclick="openQR()">📱 Share QR</button>
+    </div>
+    <div class="section-hd">Game History</div>
+    <div class="hist-list" id="hist-list-fin"></div>
   </div>
-
-  <div class="stats" id="stats"></div>
-
-  <div class="section-hd">Game History</div>
-  <div class="hist-list" id="hist-list"></div>
 </div>
-
 
 <script type="module">
 import { initializeApp }  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, update, onValue, runTransaction }
+import { getDatabase, ref, update, onValue, runTransaction, remove }
                           from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
-// ══════════════════════════════════════════════════════════════════
-// FIREBASE + ROOM SETUP
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// FIREBASE + ROOM
+// ═══════════════════════════════════════════════════════════════
 const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-// Room ID from URL hash — each hash = isolated room.
-// window.history used explicitly (our gameHistory variable would shadow plain `history`).
 function getRoomId() {
   const h = location.hash.replace('#','').trim();
   if (h && /^[a-z0-9]{6,16}$/.test(h)) return h;
@@ -235,488 +410,1110 @@ function getRoomId() {
 const ROOM_ID = getRoomId();
 const ROOT    = 'rooms/' + ROOM_ID;
 
-// Per-session write identity.
-// CRITICAL: declared before setupFirebase() — the onValue callback references these.
-const CLIENT_ID    = Math.random().toString(36).slice(2);
-let   localWriteSeq = 0;
+// ── Per-session identity ──────────────────────────────────────
+// CLIENT_ID suppresses echo; PLAYER_ID is the durable identity stored
+// in localStorage so the same person rejoins after a page refresh.
+const CLIENT_ID  = Math.random().toString(36).slice(2);
+let   lastPushedSeq = 0;
 
-// Track sequence numbers WE pushed so we can skip our own echoes.
-// Using a Set means only the exact writes we made are skipped;
-// writes from other devices (which have different _cid) always pass through.
-const myEchoSet = new Set();
+const LS_KEY       = 'sb_' + ROOM_ID;           // room-scoped storage
+const PLAYER_ID_KEY = 'sb_pid_' + ROOM_ID;      // this player's durable id
+let MY_PLAYER_ID   = localStorage.getItem(PLAYER_ID_KEY) || null;
 
-// Server time offset for cross-device timer accuracy.
-// Declared before setupFirebase() to avoid temporal dead zone risk.
 let serverOffset = 0;
 function serverNow() { return Date.now() + serverOffset; }
 
-// localStorage key scoped to this room so multiple rooms don't collide.
-const LS_KEY = 'sb_' + ROOM_ID;
-
-// ══════════════════════════════════════════════════════════════════
-// AUDIO  (Web Audio API — no external files needed)
-// ══════════════════════════════════════════════════════════════════
-let audioCtx = null;
-function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-// withAudio: resumes context before creating nodes — safe for remote-triggered sounds
-// where there may be no prior user gesture on this device.
-function withAudio(fn) {
-  try {
-    const ctx = getAudioCtx();
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => { try { fn(ctx); } catch(e){} }).catch(()=>{});
-    } else { fn(ctx); }
-  } catch(e) {}
-}
-function playDing(isAdd=true) {
-  withAudio(ctx => {
-    const osc=ctx.createOscillator(), g=ctx.createGain();
-    osc.connect(g); g.connect(ctx.destination);
-    osc.type='sine';
-    osc.frequency.setValueAtTime(isAdd?880:440, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(isAdd?1320:330, ctx.currentTime+0.08);
-    g.gain.setValueAtTime(0.4,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.35);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.35);
-    osc.onended=()=>{osc.disconnect();g.disconnect();};
-  });
-}
-function playBeep(freq=880) {
-  withAudio(ctx => {
-    const osc=ctx.createOscillator(), g=ctx.createGain();
-    osc.connect(g); g.connect(ctx.destination);
-    osc.type='square';
-    osc.frequency.setValueAtTime(freq,ctx.currentTime);
-    g.gain.setValueAtTime(0.35,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.25);
-    osc.onended=()=>{osc.disconnect();g.disconnect();};
-  });
-}
-function playAlarm() {
-  withAudio(ctx => {
-    [523,659,784,1047].forEach((freq,i) => {
-      const osc=ctx.createOscillator(), g=ctx.createGain();
-      osc.connect(g); g.connect(ctx.destination);
-      osc.type='triangle';
-      const t=ctx.currentTime+i*0.18;
-      osc.frequency.setValueAtTime(freq,t);
-      g.gain.setValueAtTime(0.4,t);
-      g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
-      osc.start(t); osc.stop(t+0.35);
-      osc.onended=()=>{osc.disconnect();g.disconnect();};
-    });
-  });
-}
-
-// ══════════════════════════════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// GAME STATE  (mirrors Firebase)
+// ═══════════════════════════════════════════════════════════════
 const COLORS = ['#f5c842','#34d97b','#f07844','#4f8ef7','#a78bfa','#f0504d','#22d3ee'];
-let localTeams        = [];
-let gameHistory       = [];
-let roundNum          = 1;
+let gameState     = 'lobby';   // "lobby" | "active" | "finished"
+let hostId        = null;
+let currentTurn   = null;      // playerId whose turn it is
+let turnIndex     = 0;
+let turnOrder     = [];        // [playerId, ...]
+let players       = {};        // {playerId: {name,color,score,joinedAt,turnSubmitted}}
+let gameHistory   = [];
+let roundNum      = 1;
+let lastScore     = null;      // {playerId, prevScore, delta} — for undo
+let canUndo       = false;
+
+let localTeams    = [];        // kept for backward-compat rendering; derived from players
+let teamCtr       = 0;
+
+// Timer
 let timerSecs         = 60;
 let timerLeft         = 60;
 let timerOn           = false;
 let timerInt          = null;
 let timerHide         = false;
 let cdBusy            = false;
-let teamCtr           = 0;
-let qrGenerated       = false;
 let timerStartedAt    = null;
 let timerDurationMs   = 60000;
 let timerPausedLeft   = null;
 let lastSyncedSeconds = -1;
 
-// ══════════════════════════════════════════════════════════════════
+let qrGenerated = false;
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════════════════
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function withAudio(fn) {
+  try {
+    const ctx = getAudioCtx();
+    if (ctx.state==='suspended') ctx.resume().then(()=>{ try{fn(ctx);}catch(e){} }).catch(()=>{});
+    else fn(ctx);
+  } catch(e){}
+}
+function playDing(isAdd=true) {
+  withAudio(ctx=>{
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);o.type='sine';
+    o.frequency.setValueAtTime(isAdd?880:440,ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(isAdd?1320:330,ctx.currentTime+0.08);
+    g.gain.setValueAtTime(0.4,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.35);
+    o.start(ctx.currentTime);o.stop(ctx.currentTime+0.35);
+    o.onended=()=>{o.disconnect();g.disconnect();};
+  });
+}
+function playBeep(freq=880) {
+  withAudio(ctx=>{
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);o.type='square';
+    o.frequency.setValueAtTime(freq,ctx.currentTime);
+    g.gain.setValueAtTime(0.35,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
+    o.start(ctx.currentTime);o.stop(ctx.currentTime+0.25);
+    o.onended=()=>{o.disconnect();g.disconnect();};
+  });
+}
+function playAlarm() {
+  withAudio(ctx=>{
+    [523,659,784,1047].forEach((freq,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);o.type='triangle';
+      const t=ctx.currentTime+i*0.18;
+      o.frequency.setValueAtTime(freq,t);
+      g.gain.setValueAtTime(0.4,t);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+      o.start(t);o.stop(t+0.35);
+      o.onended=()=>{o.disconnect();g.disconnect();};
+    });
+  });
+}
+function playCelebrate() {
+  withAudio(ctx=>{
+    [523,659,784,1047,1319].forEach((freq,i)=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);o.type='sine';
+      const t=ctx.currentTime+i*0.12;
+      o.frequency.setValueAtTime(freq,t);
+      g.gain.setValueAtTime(0.35,t);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.4);
+      o.start(t);o.stop(t+0.4);
+      o.onended=()=>{o.disconnect();g.disconnect();};
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 updateClock();
-setInterval(updateClock, 1000);
+setInterval(updateClock,1000);
 renderTimerDisplay(timerSecs);
 autoSize(document.getElementById('game-title'));
-loadLocal();   // show cached state immediately while Firebase connects
-setupFirebase();
+document.getElementById('lobby-room-code').textContent = ROOM_ID;
+document.body.addEventListener('touchstart',()=>{
+  if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
+},{once:true});
 
-// ══════════════════════════════════════════════════════════════════
-// FIREBASE SETUP
-// ══════════════════════════════════════════════════════════════════
-function setupFirebase() {
-  // Server time sync
-  onValue(ref(db,'.info/serverTimeOffset'), s => { serverOffset = s.val()||0; });
+// Show join modal unless we already have a player ID stored
+if (MY_PLAYER_ID) {
+  document.getElementById('join-modal').classList.remove('show');
+  setupFirebase();
+} else {
+  setupJoinModal();
+}
 
-  // Connection status
-  onValue(ref(db,'.info/connected'), s => {
-    const on = s.val();
-    document.getElementById('conn-dot').className = 'conn-dot '+(on?'online':'offline');
-    document.getElementById('conn-text').textContent = on ? 'Connected' : 'Offline — reconnecting…';
-  });
+// ═══════════════════════════════════════════════════════════════
+// JOIN MODAL
+// ═══════════════════════════════════════════════════════════════
+function setupJoinModal() {
+  const nameInput = document.getElementById('join-name');
+  const errEl     = document.getElementById('join-err');
+  const btn       = document.getElementById('btn-join-ok');
 
-  // Mobile audio unlock on first touch
-  document.body.addEventListener('touchstart', () => {
-    if (audioCtx && audioCtx.state==='suspended') audioCtx.resume();
-  }, {once:true});
+  nameInput.focus();
 
-  // Main room listener.
-  // Echo-skip logic: we check whether this specific snapshot was triggered by one
-  // of our own writes. We do this by comparing _cid + _seq against our myEchoSet.
-  // IMPORTANT: writes from OTHER devices (different _cid) ALWAYS pass through.
-  // Score transactions (runTransaction) do NOT set _cid/_seq, so they also always
-  // pass through — all devices including the writer see the committed value.
-  onValue(ref(db, ROOT), snap => {
-    const data = snap.val();
-    if (!data) { pushDefaults(); return; }
+  function attempt() {
+    const name = nameInput.value.trim();
+    errEl.textContent = '';
+    nameInput.classList.remove('err');
 
-    // Skip only our own echoes — identified by client ID + exact sequence number
-    const echoKey = data._cid + ':' + data._seq;
-    if (data._cid === CLIENT_ID && myEchoSet.has(echoKey)) {
-      myEchoSet.delete(echoKey); // consume it — don't let it block future updates
+    if (!name) {
+      nameInput.classList.add('err');
+      errEl.textContent = 'Please enter your name.';
       return;
     }
-    applyRemoteState(data);
-  }, err => { showError('Firebase error: '+err.message); });
-
-  // ── Separate scores listener ──────────────────────────────────
-  // Scores are written via runTransaction directly to ROOT/scores/ID.
-  // This listener fires whenever ANY score changes, independent of the
-  // main pushRemote mechanism — so it has no echo-skip issue at all.
-  // This is what actually propagates score changes to all devices reliably.
-  onValue(ref(db, ROOT+'/scores'), snap => {
-    const scores = snap.val();
-    if (!scores) return;
-    let changed = false;
-    localTeams.forEach(t => {
-      const s = scores[String(t.id)];
-      if (s !== undefined && s !== t.score) { t.score = s; changed = true; }
-    });
-    if (changed) { patchScoresDOM(); updateStats(); saveLocal(); }
-  });
-}
-
-function pushDefaults() {
-  // Only the first device to see null initialises the room; others abort.
-  runTransaction(ref(db,ROOT), current => {
-    if (current !== null) return; // abort — already exists
-    const teams = [
-      {id:1,name:'Team 1',score:0,color:COLORS[0]},
-      {id:2,name:'Team 2',score:0,color:COLORS[1]}
-    ];
-    return {
-      title:'Score Board', round:1,
-      teams, scores:{'1':0,'2':0},
-      history:[],
-      timer:{secs:60,durationMs:60000,running:false,startedAt:null,remainingMs:60000,pausedAt:null}
-    };
-  }).then(result => {
-    if (result.committed) {
-      const d = result.snapshot.val();
-      localTeams = d.teams;
-      teamCtr    = 2;
-      renderTeams(); updateStats();
+    if (name.length < 2) {
+      nameInput.classList.add('err');
+      errEl.textContent = 'Name must be at least 2 characters.';
+      return;
     }
-    // If not committed, onValue fires with existing data → applyRemoteState handles it
-  });
+    if (name.length > 30) {
+      nameInput.classList.add('err');
+      errEl.textContent = 'Name too long (max 30 chars).';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Joining…';
+
+    // Generate stable player ID and store it
+    MY_PLAYER_ID = Math.random().toString(36).slice(2,10) + Math.random().toString(36).slice(2,10);
+    localStorage.setItem(PLAYER_ID_KEY, MY_PLAYER_ID);
+
+    // Register in Firebase — if game is already active/finished, reject late join
+    runTransaction(ref(db, ROOT), cur => {
+      if (!cur) {
+        // First player — create room, become host
+        const pid = MY_PLAYER_ID;
+        return {
+          state: 'lobby', hostId: pid, title: 'Score Board', round: 1,
+          currentTurn: null, turnIndex: 0, turnOrder: [],
+          players: { [pid]: { name, color: COLORS[0], score: 0,
+                               joinedAt: serverNow(), turnSubmitted: false } },
+          history: [], lastScore: null,
+          timer: { secs:60, durationMs:60000, running:false,
+                   startedAt:null, remainingMs:60000, pausedAt:null }
+        };
+      }
+      // Room exists
+      if (cur.state !== 'lobby') return; // abort — game already started
+      // Check duplicate name
+      const existingNames = Object.values(cur.players||{}).map(p=>p.name.toLowerCase());
+      if (existingNames.includes(name.toLowerCase())) return; // abort — duplicate
+      // Add player
+      const colorIdx = Object.keys(cur.players||{}).length % COLORS.length;
+      cur.players = cur.players || {};
+      cur.players[MY_PLAYER_ID] = {
+        name, color: COLORS[colorIdx], score: 0,
+        joinedAt: serverNow(), turnSubmitted: false
+      };
+      return cur;
+    }).then(result => {
+      if (!result.committed) {
+        // Either game already started or duplicate name
+        btn.disabled = false;
+        btn.textContent = 'Join →';
+        MY_PLAYER_ID = null;
+        localStorage.removeItem(PLAYER_ID_KEY);
+        const snap = result.snapshot.val();
+        if (snap && snap.state !== 'lobby') {
+          nameInput.classList.add('err');
+          errEl.textContent = 'Game already started — cannot join now.';
+        } else {
+          nameInput.classList.add('err');
+          errEl.textContent = 'That name is already taken. Choose another.';
+        }
+        return;
+      }
+      // Joined successfully
+      document.getElementById('join-modal').classList.remove('show');
+      setupFirebase();
+    }).catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Join →';
+      errEl.textContent = 'Connection error — try again.';
+      showToast('Network error joining room', true);
+    });
+  }
+
+  btn.addEventListener('click', attempt);
+  nameInput.addEventListener('keydown', e => { if(e.key==='Enter') attempt(); });
 }
 
-// ══════════════════════════════════════════════════════════════════
-// APPLY REMOTE STATE  (called when another device's write arrives)
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// FIREBASE
+// ═══════════════════════════════════════════════════════════════
+function setupFirebase() {
+  onValue(ref(db,'.info/serverTimeOffset'), s=>{ serverOffset=s.val()||0; });
+
+  function updateConn(on) {
+    ['conn-dot','conn-dot-lobby'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.className='conn-dot '+(on?'online':'offline');
+    });
+    ['conn-text','conn-text-lobby'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.textContent = on ? 'Connected' : 'Offline — reconnecting…';
+    });
+  }
+  onValue(ref(db,'.info/connected'), s=>updateConn(!!s.val()));
+
+  // Single ROOT listener — all state flows through here
+  onValue(ref(db, ROOT), snap=>{
+    const data = snap.val();
+    if (!data) return; // should not happen — we created it in join
+    if (data._cid===CLIENT_ID && data._seq===lastPushedSeq) return; // echo skip
+    applyRemoteState(data);
+  }, err=>showError('Firebase error: '+err.message));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APPLY REMOTE STATE
+// ═══════════════════════════════════════════════════════════════
 function applyRemoteState(data) {
+  const prevState = gameState;
+
+  gameState   = data.state   || 'lobby';
+  hostId      = data.hostId  || null;
+  currentTurn = data.currentTurn || null;
+  turnIndex   = data.turnIndex   || 0;
+  turnOrder   = data.turnOrder   || [];
+  roundNum    = data.round       || 1;
+  lastScore   = data.lastScore   || null;
+  canUndo     = !!(lastScore && lastScore.playerId === MY_PLAYER_ID);
+
+  // Players object
+  if (data.players) {
+    players = data.players;
+    // Build localTeams from players for backward-compat rendering
+    localTeams = playersToTeams(players);
+    teamCtr = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
+  }
+
   // Title
   if (data.title !== undefined) {
     const el = document.getElementById('game-title');
-    if (el.value !== data.title) { el.value = data.title; autoSize(el); }
+    if (el.value !== data.title) { el.value=data.title; autoSize(el); }
   }
-  // Round
-  if (data.round !== undefined) {
-    roundNum = data.round;
-    document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
-  }
-  // Teams — DOM diffing: only rebuild if structure changed; patch scores in-place otherwise
-  if (data.teams) {
-    const incoming = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
 
-    // Merge scores from dedicated /scores node (most up-to-date)
-    if (data.scores) {
-      incoming.forEach(t => {
-        const s = data.scores[String(t.id)];
-        if (s !== undefined) t.score = s;
-      });
-    }
-
-    const structChanged =
-      incoming.length !== localTeams.length ||
-      incoming.some((t,i) => t.id !== localTeams[i]?.id ||
-                              t.name !== localTeams[i]?.name ||
-                              t.color !== localTeams[i]?.color);
-    localTeams = incoming;
-    teamCtr = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
-
-    if (structChanged) {
-      renderTeams();
-    } else {
-      patchScoresDOM();
-    }
-  }
   // History
   if (data.history) {
     gameHistory = Array.isArray(data.history) ? data.history : Object.values(data.history);
-    renderHistory();
   }
+
   // Timer
   if (data.timer) syncTimerFromRemote(data.timer);
 
-  updateStats();
+  // Round display
+  document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
+
+  // Render the correct view
+  renderView(prevState !== gameState);
   saveLocal();
 }
 
-// ══════════════════════════════════════════════════════════════════
-// PUSH HELPERS
-// ══════════════════════════════════════════════════════════════════
+// Convert players map → sorted teams array (by joinedAt for stable tie-breaking)
+function playersToTeams(pmap) {
+  return Object.entries(pmap||{})
+    .map(([pid,p])=>({
+      id: pid,        // use playerId as id
+      name: p.name,
+      score: p.score||0,
+      color: p.color||COLORS[0],
+      joinedAt: p.joinedAt||0,
+      turnSubmitted: p.turnSubmitted||false
+    }))
+    .sort((a,b)=>a.joinedAt-b.joinedAt); // stable tie-breaking: earlier join ranks higher
+}
 
-// pushRemote: tags the write with CLIENT_ID + seq so we can identify
-// our own echo and skip it. Uses myEchoSet for O(1) echo detection.
-function pushRemote(partial) {
-  localWriteSeq++;
-  partial._cid = CLIENT_ID;
-  partial._seq = localWriteSeq;
-  myEchoSet.add(CLIENT_ID + ':' + localWriteSeq);
-  // Clean up old echo keys to prevent unbounded growth
-  if (myEchoSet.size > 50) {
-    const first = myEchoSet.values().next().value;
-    myEchoSet.delete(first);
+// ═══════════════════════════════════════════════════════════════
+// VIEW ROUTER
+// ═══════════════════════════════════════════════════════════════
+function renderView(stateChanged) {
+  const isHost = MY_PLAYER_ID === hostId;
+
+  if (gameState === 'lobby') {
+    show('lobby-view'); hide('game-view'); hide('finished-view');
+    renderLobby(isHost);
+  } else if (gameState === 'active') {
+    hide('lobby-view'); show('game-view'); hide('finished-view');
+    if (stateChanged) { stopLocalTick(); lastSyncedSeconds=-1; }
+    renderGame(isHost);
+  } else if (gameState === 'finished') {
+    hide('lobby-view'); hide('game-view'); show('finished-view');
+    renderFinished(isHost);
   }
-  update(ref(db,ROOT), partial);
+}
+
+function show(id){ document.getElementById(id).style.display=''; }
+function hide(id){ document.getElementById(id).style.display='none'; }
+
+// ═══════════════════════════════════════════════════════════════
+// LOBBY RENDER
+// ═══════════════════════════════════════════════════════════════
+function renderLobby(isHost) {
+  const list = document.getElementById('players-list');
+  list.innerHTML = '';
+  Object.entries(players).sort((a,b)=>a[1].joinedAt-b[1].joinedAt).forEach(([pid,p])=>{
+    const isMe   = pid === MY_PLAYER_ID;
+    const isH    = pid === hostId;
+    const div    = document.createElement('div');
+    div.className= 'player-row'+(isMe?' you':'')+(isH?' host-row':'');
+    div.innerHTML= `
+      <div class="player-avatar" style="background:${p.color}20;color:${p.color}">
+        ${esc(p.name.charAt(0).toUpperCase())}
+      </div>
+      <div class="player-name-lobby">${esc(p.name)}</div>
+      ${isH ? '<span class="player-badge host-badge">👑 Host</span>' : ''}
+      ${isMe ? '<span class="player-badge you-badge">You</span>' : ''}
+    `;
+    list.appendChild(div);
+  });
+
+  const count = Object.keys(players).length;
+
+  // Start button — host only, need ≥2 players
+  const btnStart = document.getElementById('btn-start-game');
+  const btnNew   = document.getElementById('btn-new-lobby');
+  const waitMsg  = document.getElementById('waiting-msg');
+
+  if (isHost) {
+    btnStart.style.display = 'flex';
+    btnNew.style.display   = 'flex';
+    btnStart.disabled = count < 2;
+    btnStart.title = count < 2 ? 'Need at least 2 players' : '';
+    waitMsg.style.display = 'none';
+  } else {
+    btnStart.style.display = 'none';
+    btnNew.style.display   = 'none';
+    waitMsg.style.display  = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GAME RENDER
+// ═══════════════════════════════════════════════════════════════
+function renderGame(isHost) {
+  const isMyTurn = currentTurn === MY_PLAYER_ID;
+  const curPlayer= players[currentTurn];
+
+  // State badge
+  document.getElementById('state-label').textContent = 'Active';
+  const badge = document.getElementById('state-badge');
+  badge.className = 'state-badge active';
+
+  // Turn banner
+  const banner  = document.getElementById('turn-banner');
+  const whoEl   = document.getElementById('turn-who');
+  const actEl   = document.getElementById('turn-actions');
+
+  if (isMyTurn) {
+    banner.className = 'turn-banner your-turn';
+    whoEl.innerHTML  = `<span class="turn-name">⚡ Your turn, ${esc(players[MY_PLAYER_ID]?.name||'You')}!</span>`;
+    actEl.innerHTML  = `
+      <button class="btn-turn btn-end-turn" onclick="endMyTurn()">✓ Done / Next Turn</button>
+      ${canUndo ? '<button class="btn-turn btn-undo" onclick="undoLastScore()">↩ Undo</button>' : ''}
+    `;
+  } else {
+    banner.className = 'turn-banner other-turn';
+    const nm = curPlayer ? esc(curPlayer.name) : '…';
+    whoEl.innerHTML  = `Waiting for <span class="other-name">${nm}</span> to play`;
+    actEl.innerHTML  = isHost
+      ? `<button class="btn-turn btn-skip" onclick="hostSkipTurn()">⏭ Skip</button>
+         <button class="btn-turn btn-end-game" onclick="hostEndGame()">🏁 End Game</button>`
+      : '';
+  }
+
+  // Host title-editing control
+  const editIco = document.getElementById('edit-ico');
+  const titleEl = document.getElementById('game-title');
+  if (editIco) editIco.style.display = isHost ? '' : 'none';
+  if (titleEl) titleEl.disabled = !isHost;
+
+  // Action bar buttons — host-only in active state
+  document.getElementById('btn-add').disabled   = !isHost;
+  document.getElementById('btn-reset').disabled = !isHost;
+  document.getElementById('btn-save').disabled  = false;
+
+  // Teams grid
+  renderTeams(isHost, isMyTurn);
+  updateStats();
+  renderHistory(document.getElementById('hist-list'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TEAMS GRID  (DOM diffing, state-aware)
+// ═══════════════════════════════════════════════════════════════
+const domCache = { scoreEls:{}, teamBoxes:{} };
+
+function renderTeams(isHost, isMyTurn) {
+  const grid     = document.getElementById('teams-grid');
+  const sorted   = getSortedPlayers();
+  const maxScore = sorted.length ? Math.max(...sorted.map(t=>t.score)) : 0;
+
+  // Remove stale boxes
+  grid.querySelectorAll('.team-box').forEach(box=>{
+    if(!sorted.find(t=>String(t.id)===box.dataset.id)) box.remove();
+  });
+
+  sorted.forEach((team, idx)=>{
+    const isThisPlayersTurn = team.id === currentTurn;
+    const isLead = team.score===maxScore &&
+                   sorted.filter(t=>t.score===maxScore).length===1 && maxScore>0;
+    const canScore = gameState==='active' && isMyTurn && isThisPlayersTurn;
+    // In active mode: only current-turn player's card has enabled buttons
+    // (score buttons for all teams are enabled for that player — they score themselves)
+    // Actually: the current player scores THEIR OWN card only
+    const myOwnCard = team.id === MY_PLAYER_ID;
+    const btnEnabled = gameState==='active' && isMyTurn && myOwnCard;
+    const step = team.step || 1;
+
+    let box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
+    if (!box) {
+      box = document.createElement('div');
+      box.dataset.id = team.id;
+      box.innerHTML = buildTeamHTML(team, step, btnEnabled, isHost, gameState);
+      grid.appendChild(box);
+    } else {
+      // Patch
+      const ni = box.querySelector('.team-name-inp');
+      if (ni && document.activeElement!==ni && ni.value!==team.name) ni.value=team.name;
+      if (ni) ni.disabled = gameState!=='lobby' && !isHost;
+      const si = box.querySelector('.score-num');
+      if (si && si.textContent.replace(/,/g,'') != team.score) si.textContent=fmtScore(team.score);
+      box.querySelectorAll('.step').forEach(b=>{
+        b.classList.toggle('on', parseInt(b.dataset.step)===step);
+        b.disabled = !btnEnabled;
+      });
+      const bm = box.querySelector('.bminus');
+      const bp = box.querySelector('.bplus');
+      if (bm) bm.disabled = !btnEnabled;
+      if (bp) bp.disabled = !btnEnabled;
+      // Lock message
+      const lk = box.querySelector('.lock-msg');
+      if (lk) {
+        if (gameState==='active') {
+          if (isThisPlayersTurn && isMyTurn && myOwnCard) {
+            lk.className='lock-msg your'; lk.textContent='⚡ Your turn — score now!';
+          } else if (isThisPlayersTurn) {
+            lk.className='lock-msg'; lk.textContent='🎯 This player is scoring…';
+          } else {
+            lk.className='lock-msg'; lk.textContent='🔒 Not this player\'s turn';
+          }
+        } else { lk.textContent=''; }
+      }
+      // Remove button
+      const rm = box.querySelector('.rm-team');
+      if (rm) rm.style.display = (isHost && gameState==='lobby') ? '' : 'none';
+    }
+
+    // Classes
+    let cls = 'team-box';
+    if (isLead) cls += ' leader';
+    if (isThisPlayersTurn && gameState==='active') cls += ' my-turn-box';
+    box.className = cls;
+    const strip = box.querySelector('.color-strip');
+    if (strip) strip.style.background = team.color;
+  });
+
+  // Enforce order
+  sorted.forEach((team,idx)=>{
+    const box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
+    if (box && grid.children[idx]!==box) grid.insertBefore(box, grid.children[idx]||null);
+  });
+
+  // Handlers once
+  if (!grid._listenersOK) {
+    grid._listenersOK = true;
+    grid.addEventListener('click', e=>{
+      const rm = e.target.closest('.rm-team');
+      const bs = e.target.closest('.bscore');
+      const st = e.target.closest('.step');
+      if (rm) hostRemovePlayer(rm.dataset.id);
+      if (bs) changeScore(bs.dataset.id, parseInt(bs.dataset.dir));
+      if (st) setStep(st, st.dataset.id, parseInt(st.dataset.step));
+    });
+    grid.addEventListener('change', e=>{
+      const tn = e.target.closest('.team-name-inp');
+      if (tn) updatePlayerName(tn.dataset.id, tn.value);
+    });
+  }
+
+  rebuildDomCache(sorted);
+}
+
+function buildTeamHTML(team, step, btnEnabled, isHost, state) {
+  const rmVisible = isHost && state==='lobby';
+  return `
+    <div class="leader-crown">🏆 Leading</div>
+    <div class="color-strip" style="background:${team.color}"></div>
+    <button class="rm-team" data-id="${team.id}" style="${rmVisible?'':'display:none'}">×</button>
+    <input type="text" class="team-name-inp" value="${esc(team.name)}"
+           data-id="${team.id}" placeholder="Name"
+           ${(state!=='lobby'&&!isHost)?'disabled':''}>
+    <div class="ctrls">
+      <button class="bscore bminus" data-id="${team.id}" data-dir="-1" ${btnEnabled?'':'disabled'}>−</button>
+      <div class="score-num" id="sn-${team.id}">${fmtScore(team.score)}</div>
+      <button class="bscore bplus"  data-id="${team.id}" data-dir="1"  ${btnEnabled?'':'disabled'}>+</button>
+    </div>
+    <div class="steps">
+      ${[1,2,5,10].map(n=>`<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}"
+        ${btnEnabled?'':'disabled'}>&pm;${n}</button>`).join('')}
+    </div>
+    <div class="lock-msg"></div>`;
+}
+
+function patchScoresDOM() {
+  const sorted   = getSortedPlayers();
+  const maxScore = sorted.length ? Math.max(...sorted.map(t=>t.score)) : 0;
+  sorted.forEach(t=>{
+    const el  = domCache.scoreEls[t.id]  || document.getElementById('sn-'+t.id);
+    const box = domCache.teamBoxes[t.id] ||
+                document.querySelector(`.team-box[data-id="${t.id}"]`);
+    if (el && el.textContent.replace(/,/g,'') != t.score) el.textContent=fmtScore(t.score);
+    if (box) {
+      const lead = t.score===maxScore &&
+                   sorted.filter(x=>x.score===maxScore).length===1 && maxScore>0;
+      box.classList.toggle('leader', lead);
+    }
+  });
+}
+
+function rebuildDomCache(sorted) {
+  domCache.scoreEls={}; domCache.teamBoxes={};
+  (sorted||getSortedPlayers()).forEach(t=>{
+    domCache.scoreEls[t.id]  = document.getElementById('sn-'+t.id);
+    domCache.teamBoxes[t.id] = document.querySelector(`.team-box[data-id="${t.id}"]`);
+  });
+}
+
+// Sort players by score desc, tie-break by joinedAt asc
+function getSortedPlayers() {
+  return playersToTeams(players).sort((a,b)=>
+    b.score!==a.score ? b.score-a.score : a.joinedAt-b.joinedAt
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FINISHED VIEW
+// ═══════════════════════════════════════════════════════════════
+function renderFinished(isHost) {
+  const sorted = getSortedPlayers();
+  const podium = document.getElementById('podium');
+  const medals = ['🥇','🥈','🥉'];
+  podium.innerHTML = sorted.slice(0,10).map((t,i)=>`
+    <div class="podium-card rank-${Math.min(i+1,4)}">
+      <div class="podium-rank">${medals[i]||'#'+(i+1)}</div>
+      <div class="podium-avatar" style="background:${t.color}20;color:${t.color}">
+        ${esc(t.name.charAt(0).toUpperCase())}
+      </div>
+      <div class="podium-name">${esc(t.name)}</div>
+      <div class="podium-score">${fmtScore(t.score)}</div>
+    </div>`).join('');
+
+  document.getElementById('finished-sub').textContent =
+    sorted[0] ? `🏆 ${sorted[0].name} wins!` : 'Final Scores';
+
+  const btnNew = document.getElementById('btn-new-finished');
+  btnNew.style.display = isHost ? 'flex' : 'none';
+
+  renderHistory(document.getElementById('hist-list-fin'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCORE CHANGE  (only current-turn player, their own card)
+// ═══════════════════════════════════════════════════════════════
+function changeScore(playerId, dir) {
+  if (gameState !== 'active') return;
+  if (playerId !== MY_PLAYER_ID) return;  // can only score yourself
+  if (currentTurn !== MY_PLAYER_ID) {
+    showToast("It's not your turn!", true); return;
+  }
+
+  const step = getStep(playerId);
+  const p    = players[playerId];
+  if (!p) return;
+
+  const prevScore = p.score;
+  const newScore  = Math.max(0, prevScore + dir * step);
+
+  // Optimistic update
+  p.score = newScore;
+  const el = domCache.scoreEls[playerId] || document.getElementById('sn-'+playerId);
+  if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent=fmtScore(newScore); }
+  playDing(dir>0);
+  patchScoresDOM(); updateStats();
+
+  // Atomic write + store undo info
+  runTransaction(ref(db, ROOT+'/players/'+playerId+'/score'), cur=>{
+    const base = cur===null ? newScore : cur;
+    return Math.max(0, base + dir*step);
+  }).then(result=>{
+    if (result.committed && result.snapshot.exists()) {
+      const committed = result.snapshot.val();
+      p.score = committed;
+      if (el) el.textContent=fmtScore(committed);
+      patchScoresDOM(); updateStats();
+      // Store undo state
+      pushRemote({
+        [`players/${playerId}/score`]: committed,
+        lastScore: { playerId, prevScore, delta: dir*step, ts: serverNow() }
+      });
+    }
+  }).catch(()=>{ showToast('Score update failed — retrying…',true); pushRemote({[`players/${playerId}/score`]:p.score}); });
+}
+
+function getStep(playerId) {
+  const t = playersToTeams(players).find(t=>t.id===playerId);
+  if (t && t.step) return t.step;
+  const box = domCache.teamBoxes[playerId] ||
+              document.querySelector(`.team-box[data-id="${playerId}"]`);
+  const s   = box && box.querySelector('.step.on');
+  return s ? parseInt(s.dataset.step) : 1;
+}
+
+function setStep(btn, playerId, n) {
+  const box = document.querySelector(`.team-box[data-id="${playerId}"]`);
+  if (!box) return;
+  box.querySelectorAll('.step').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if (players[playerId]) {
+    players[playerId].step = n;
+    pushRemote({ [`players/${playerId}/step`]: n });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UNDO LAST SCORE
+// ═══════════════════════════════════════════════════════════════
+function undoLastScore() {
+  if (!lastScore || lastScore.playerId !== MY_PLAYER_ID) return;
+  const pid   = lastScore.playerId;
+  const prev  = lastScore.prevScore;
+  runTransaction(ref(db, ROOT+'/players/'+pid+'/score'), ()=>prev)
+    .then(()=>{
+      pushRemote({ [`players/${pid}/score`]:prev, lastScore:null });
+      showToast('Score undone ↩');
+    }).catch(()=>showToast('Undo failed',true));
+}
+window.undoLastScore = undoLastScore;
+
+// ═══════════════════════════════════════════════════════════════
+// TURN MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+function endMyTurn() {
+  if (currentTurn !== MY_PLAYER_ID) return;
+  advanceTurn();
+}
+window.endMyTurn = endMyTurn;
+
+function hostSkipTurn() {
+  if (MY_PLAYER_ID !== hostId) return;
+  advanceTurn();
+}
+window.hostSkipTurn = hostSkipTurn;
+
+function advanceTurn() {
+  if (!turnOrder.length) return;
+  const nextIdx = (turnIndex + 1) % turnOrder.length;
+  const nextPid = turnOrder[nextIdx];
+  // Reset turnSubmitted and lastScore for next turn
+  pushRemote({
+    turnIndex:   nextIdx,
+    currentTurn: nextPid,
+    lastScore:   null,
+    [`players/${currentTurn}/turnSubmitted`]: true
+  });
+  showToast(`▶ ${players[nextPid]?.name||'Next player'}'s turn`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HOST CONTROLS
+// ═══════════════════════════════════════════════════════════════
+function hostStartGame() {
+  if (MY_PLAYER_ID !== hostId) return;
+  const pids = Object.keys(players).sort((a,b)=>players[a].joinedAt-players[b].joinedAt);
+  if (pids.length < 2) { showToast('Need at least 2 players to start',true); return; }
+  const order = [...pids]; // join order = turn order
+  pushRemote({
+    state: 'active',
+    turnOrder: order,
+    turnIndex: 0,
+    currentTurn: order[0],
+    lastScore: null
+  });
+  showToast('Game started! ▶');
+}
+window.hostStartGame = hostStartGame;
+
+function hostEndGame() {
+  if (MY_PLAYER_ID !== hostId) return;
+  if (!confirm('End the game and show final scores?')) return;
+  stopLocalTick();
+  pushRemote({ state:'finished', currentTurn:null });
+  playCelebrate();
+}
+window.hostEndGame = hostEndGame;
+
+function hostNewGame() {
+  if (MY_PLAYER_ID !== hostId) return;
+  if (!confirm('Start a new game? This will reset all scores and return to lobby.')) return;
+  // Reset scores, go back to lobby
+  const resetPlayers = {};
+  Object.entries(players).forEach(([pid,p])=>{
+    resetPlayers[pid] = {...p, score:0, turnSubmitted:false};
+  });
+  stopLocalTick();
+  roundNum++;
+  pushRemote({
+    state: 'lobby', currentTurn:null, turnIndex:0, turnOrder:[],
+    round: roundNum, players: resetPlayers, lastScore:null,
+    timer:{ secs:60, durationMs:60000, running:false,
+            startedAt:null, remainingMs:60000, pausedAt:null }
+  });
+  showToast('New game — back to lobby!');
+}
+window.hostNewGame = hostNewGame;
+
+function hostRemovePlayer(pid) {
+  if (MY_PLAYER_ID !== hostId || gameState !== 'lobby') return;
+  if (pid === hostId) { showToast('Cannot remove the host',true); return; }
+  if (Object.keys(players).length <= 1) return;
+  if (!confirm(`Remove ${players[pid]?.name}?`)) return;
+  const updated = {...players};
+  delete updated[pid];
+  pushRemote({ players: updated });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYER NAME (lobby only)
+// ═══════════════════════════════════════════════════════════════
+function updatePlayerName(pid, val) {
+  if (gameState !== 'lobby') { showToast('Cannot rename after game starts',true); return; }
+  if (pid !== MY_PLAYER_ID && MY_PLAYER_ID !== hostId) return;
+  const trimmed = val.trim();
+  if (!trimmed || trimmed.length < 2) { showToast('Name too short (min 2 chars)',true); return; }
+  if (trimmed.length > 30) { showToast('Name too long (max 30 chars)',true); return; }
+  // Duplicate check
+  const others = Object.entries(players)
+    .filter(([id])=>id!==pid)
+    .map(([,p])=>p.name.toLowerCase());
+  if (others.includes(trimmed.toLowerCase())) { showToast('That name is already taken',true); return; }
+  pushRemote({ [`players/${pid}/name`]: trimmed });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADD TEAM / RESET (host only)
+// ═══════════════════════════════════════════════════════════════
+function addTeamUI() {
+  if (MY_PLAYER_ID !== hostId) return;
+  if (gameState !== 'lobby') { showToast('Cannot add players after game starts',true); return; }
+  // Opens a mini prompt — could be a modal but keep it simple
+  const name = prompt('New player name:');
+  if (!name) return;
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length<2) { showToast('Name too short',true); return; }
+  if (trimmed.length>30) { showToast('Name too long',true); return; }
+  const lc = trimmed.toLowerCase();
+  if (Object.values(players).some(p=>p.name.toLowerCase()===lc)) {
+    showToast('Name already taken',true); return;
+  }
+  const pid      = Math.random().toString(36).slice(2,14);
+  const colorIdx = Object.keys(players).length % COLORS.length;
+  pushRemote({
+    [`players/${pid}`]: { name:trimmed, color:COLORS[colorIdx],
+                          score:0, joinedAt:serverNow(), turnSubmitted:false }
+  });
+}
+window.addTeamUI = addTeamUI;
+
+function resetAll() {
+  if (MY_PLAYER_ID !== hostId) return;
+  if (!confirm('Reset all scores to 0 and start a new round?')) return;
+  const resetPlayers = {};
+  Object.entries(players).forEach(([pid,p])=>{
+    resetPlayers[pid]={...p, score:0, turnSubmitted:false};
+  });
+  roundNum++;
+  document.getElementById('round-disp').textContent='🎮 Round '+roundNum;
+  pushRemote({ players:resetPlayers, round:roundNum, lastScore:null });
+  showToast('Round '+roundNum+' begins! 🎮');
+}
+window.resetAll = resetAll;
+
+// ═══════════════════════════════════════════════════════════════
+// SAVE GAME / HISTORY
+// ═══════════════════════════════════════════════════════════════
+function saveGame() {
+  const sorted = getSortedPlayers();
+  const entry  = {
+    id:    Date.now(),
+    game:  document.getElementById('game-title').value||'Score Board',
+    date:  new Date().toLocaleString(),
+    round: roundNum,
+    teams: sorted.map(t=>({name:t.name, score:t.score, color:t.color}))
+  };
+  runTransaction(ref(db, ROOT+'/history'), cur=>{
+    let h = cur ? (Array.isArray(cur)?cur:Object.values(cur)) : [];
+    h.unshift(entry);
+    if (h.length>60) h=h.slice(0,60);
+    return h;
+  }).then(result=>{
+    if (result.committed) {
+      const v=result.snapshot.val();
+      gameHistory = v ? (Array.isArray(v)?v:Object.values(v)) : [];
+      renderHistory(document.getElementById('hist-list'));
+      if (gameState==='finished') renderHistory(document.getElementById('hist-list-fin'));
+      updateStats();
+      showToast('Game saved! 💾');
+    }
+  }).catch(()=>showToast('Save failed — check connection',true));
+}
+window.saveGame = saveGame;
+
+function renderHistory(el) {
+  if (!el) return;
+  if (!gameHistory.length) {
+    el.innerHTML='<div class="empty">No saved games yet.</div>'; return;
+  }
+  el.innerHTML = gameHistory.map((e,i)=>{
+    const max   = Math.max(...(e.teams||[]).map(t=>t.score));
+    const chips = (e.teams||[]).map(t=>{
+      const w = t.score===max && (e.teams||[]).filter(x=>x.score===max).length===1;
+      return `<span class="chip${w?' win':''}"
+        style="${w?'':'border-left:3px solid '+t.color}">${esc(t.name)}: ${fmtScore(t.score)}</span>`;
+    }).join('');
+    return `<div class="hist-card">
+      <div class="hist-date">${e.date}</div>
+      <div style="flex:1">
+        <div class="hist-name">${esc(e.game)} · Round ${e.round}</div>
+        <div class="hist-chips" style="margin-top:6px">${chips}</div>
+      </div>
+      <button class="hist-del" data-idx="${i}">🗑</button>
+    </div>`;
+  }).join('');
+  el.onclick = ev=>{
+    const d=ev.target.closest('.hist-del');
+    if (d) delHistory(parseInt(d.dataset.idx));
+  };
+}
+
+function delHistory(idx) {
+  const entryId = gameHistory[idx]?.id;
+  if (!entryId) return;
+  runTransaction(ref(db, ROOT+'/history'), cur=>{
+    let h = cur ? (Array.isArray(cur)?cur:Object.values(cur)) : [];
+    return h.filter(e=>e.id!==entryId);
+  }).then(result=>{
+    if (result.committed) {
+      const v=result.snapshot.val();
+      gameHistory = v ? (Array.isArray(v)?v:Object.values(v)) : [];
+      renderHistory(document.getElementById('hist-list'));
+      if (gameState==='finished') renderHistory(document.getElementById('hist-list-fin'));
+      updateStats();
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════════════════════════════
+function updateStats() {
+  const el = document.getElementById('stats');
+  if (!el || gameState==='lobby' || gameState==='finished') return;
+  const sorted  = getSortedPlayers();
+  const total   = sorted.reduce((a,t)=>a+t.score,0);
+  const leader  = sorted[0];
+  const gap     = sorted.length>1 ? sorted[0].score-sorted[1].score : 0;
+  const curName = players[currentTurn]?.name||'—';
+  el.innerHTML = `
+    <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${fmtScore(total)}</div></div>
+    <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:.9rem;padding-top:8px">${leader?esc(leader.name):'—'}</div></div>
+    <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${fmtScore(gap)}</div></div>
+    <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${gameHistory.length}</div></div>
+    <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
+    <div class="stat"><div class="stat-l">Current Turn</div><div class="stat-v" style="font-size:.9rem;padding-top:8px">${esc(curName)}</div></div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PUSH HELPERS
+// ═══════════════════════════════════════════════════════════════
+function pushRemote(partial) {
+  lastPushedSeq++;
+  partial._cid = CLIENT_ID;
+  partial._seq = lastPushedSeq;
+  update(ref(db, ROOT), partial);
   saveLocal();
 }
 
 function pushTeams() {
-  // Build flat scores map to keep /scores in sync with team data
-  const scores = {};
-  localTeams.forEach(t => { scores[String(t.id)] = t.score; });
-  pushRemote({ teams:localTeams, scores });
+  // Build flat player score updates
+  const updates = {};
+  Object.entries(players).forEach(([pid,p])=>{ updates[`players/${pid}/score`]=p.score; });
+  pushRemote(updates);
 }
 
-function pushAll() {
-  const scores = {};
-  localTeams.forEach(t => { scores[String(t.id)] = t.score; });
-  pushRemote({
-    title:   document.getElementById('game-title').value,
-    round:   roundNum,
-    teams:   localTeams,
-    scores,
-    history: gameHistory
-  });
+// ═══════════════════════════════════════════════════════════════
+// TITLE SYNC (host only)
+// ═══════════════════════════════════════════════════════════════
+let titleTimer;
+function syncTitle() {
+  if (MY_PLAYER_ID !== hostId) return;
+  clearTimeout(titleTimer);
+  titleTimer = setTimeout(()=>pushRemote({title:document.getElementById('game-title').value}),600);
 }
+window.syncTitle = syncTitle;
 
-let teamPushTimer = null;
-function pushTeamsDebounced() {
-  clearTimeout(teamPushTimer);
-  teamPushTimer = setTimeout(() => pushTeams(), 120);
-}
-
-// ══════════════════════════════════════════════════════════════════
-// LOCAL PERSISTENCE  (survives refresh while offline)
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// LOCAL PERSISTENCE
+// ═══════════════════════════════════════════════════════════════
 function saveLocal() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify({
-      title:   document.getElementById('game-title').value,
-      round:   roundNum,
-      teams:   localTeams,
-      history: gameHistory,
-      savedAt: Date.now()
+      state:gameState, hostId, currentTurn, turnIndex, turnOrder,
+      players, round:roundNum, gameHistory, savedAt:Date.now()
     }));
-  } catch(e) {}
+  } catch(e){}
 }
 
-function loadLocal() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    if (!d || Date.now()-d.savedAt > 86400000) return; // expire after 24h
-    if (d.title) {
-      const el = document.getElementById('game-title');
-      el.value = d.title; autoSize(el);
-    }
-    if (d.round) {
-      roundNum = d.round;
-      document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
-    }
-    if (d.teams && d.teams.length) {
-      localTeams = d.teams;
-      teamCtr    = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
-      renderTeams();
-    }
-    if (d.history) { gameHistory = d.history; renderHistory(); }
-    updateStats();
-  } catch(e) {}
-}
-
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // TIMER
-// ══════════════════════════════════════════════════════════════════
-// Schema stored in Firebase:
-//   timer.durationMs  — full duration for this segment (ms)
-//   timer.running     — boolean
-//   timer.startedAt   — server ms when started/resumed
-//   timer.remainingMs — ms left at pause moment
-//   timer.pausedAt    — server ms when paused (tie-breaking)
-//
-// Running:  remaining = durationMs − (serverNow() − startedAt)
-// Paused:   remaining = remainingMs
-
+// ═══════════════════════════════════════════════════════════════
 function syncTimerFromRemote(t) {
-  timerSecs = Math.round((t.durationMs || (t.secs||60)*1000) / 1000);
-
+  timerSecs = Math.round((t.durationMs||(t.secs||60)*1000)/1000);
   if (t.running && t.startedAt) {
-    const leftMs = Math.max(0, (t.durationMs||timerSecs*1000) - (serverNow()-t.startedAt));
-    timerLeft       = Math.floor(leftMs/1000);
-    timerOn         = true;
-    timerStartedAt  = t.startedAt;
-    timerDurationMs = t.durationMs || timerSecs*1000;
+    const leftMs = Math.max(0,(t.durationMs||timerSecs*1000)-(serverNow()-t.startedAt));
+    timerLeft=Math.floor(leftMs/1000); timerOn=true;
+    timerStartedAt=t.startedAt; timerDurationMs=t.durationMs||timerSecs*1000;
     stopLocalTick(); lastSyncedSeconds=-1; startLocalTick();
-    document.getElementById('t-play').style.display  = 'none';
-    document.getElementById('t-pause').style.display = 'flex';
+    document.getElementById('t-play').style.display='none';
+    document.getElementById('t-pause').style.display='flex';
   } else {
-    const leftMs = (t.remainingMs !== undefined) ? t.remainingMs
-                 : (t.pausedLeft  !== undefined) ? t.pausedLeft
-                 : timerSecs*1000;
-    timerLeft       = Math.floor(leftMs/1000);
-    timerOn         = false;
-    timerStartedAt  = null;
-    timerDurationMs = t.durationMs || timerSecs*1000;
-    timerPausedLeft = leftMs;
+    const leftMs=t.remainingMs!==undefined?t.remainingMs:timerSecs*1000;
+    timerLeft=Math.floor(leftMs/1000); timerOn=false; timerStartedAt=null;
+    timerDurationMs=t.durationMs||timerSecs*1000; timerPausedLeft=leftMs;
     stopLocalTick(); lastSyncedSeconds=-1;
-    document.getElementById('t-play').style.display  = 'flex';
-    document.getElementById('t-pause').style.display = 'none';
+    document.getElementById('t-play').style.display='flex';
+    document.getElementById('t-pause').style.display='none';
     renderTimerDisplay(timerLeft);
   }
 }
 
 function startLocalTick() {
   stopLocalTick();
-  function tick() {
+  timerInt=setInterval(()=>{
     const elapsed = timerStartedAt ? serverNow()-timerStartedAt : 0;
-    const leftMs  = Math.max(0, (timerDurationMs||timerSecs*1000)-elapsed);
+    const leftMs  = Math.max(0,(timerDurationMs||timerSecs*1000)-elapsed);
     const secs    = Math.floor(leftMs/1000);
-    if (secs !== lastSyncedSeconds) {
-      lastSyncedSeconds = secs;
-      timerLeft = secs;
-      renderTimerDisplay(secs);
-      if (secs<=3 && secs>0) { playBeep(secs===1?1200:secs===2?1000:800); if (!cdBusy) showCountdown(secs); }
-      if (secs<=0) {
-        stopLocalTick(); timerOn=false;
-        document.getElementById('t-play').style.display  = 'flex';
-        document.getElementById('t-pause').style.display = 'none';
-        playAlarm(); showCountdown(0); return;
-      }
+    if (secs===lastSyncedSeconds) return;
+    lastSyncedSeconds=secs; timerLeft=secs; renderTimerDisplay(secs);
+    if (secs<=3&&secs>0){playBeep(secs===1?1200:secs===2?1000:800);if(!cdBusy)showCountdown(secs);}
+    if (secs<=0){
+      stopLocalTick();timerOn=false;
+      document.getElementById('t-play').style.display='flex';
+      document.getElementById('t-pause').style.display='none';
+      playAlarm();showCountdown(0);
     }
-  }
-  timerInt = setInterval(tick, 100);
+  },100);
 }
-function stopLocalTick() { if (timerInt) { clearInterval(timerInt); timerInt=null; } }
+function stopLocalTick(){ if(timerInt){clearInterval(timerInt);timerInt=null;} }
 
 function renderTimerDisplay(secs) {
-  const el = document.getElementById('timer-disp');
-  el.textContent = String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0');
-  el.className   = 'timer-display';
-  if (secs<=10 && secs>3) el.classList.add('warn');
-  if (secs<=3  && secs>0) el.classList.add('danger');
+  const el=document.getElementById('timer-disp');
+  if(!el) return;
+  el.textContent=String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0');
+  el.className='timer-display';
+  if(secs<=10&&secs>3) el.classList.add('warn');
+  if(secs<=3&&secs>0)  el.classList.add('danger');
 }
 
-function pushTimerState(running, overrideRemainingMs) {
-  const now = serverNow();
+function pushTimerState(running, overrideMs) {
+  const now=serverNow();
   if (running) {
-    const ms = overrideRemainingMs !== undefined ? overrideRemainingMs
-             : (timerPausedLeft !== null ? timerPausedLeft : timerDurationMs);
-    timerStartedAt=now; timerDurationMs=ms; timerPausedLeft=null;
+    const ms=overrideMs!==undefined?overrideMs:(timerPausedLeft!==null?timerPausedLeft:timerDurationMs);
+    timerStartedAt=now;timerDurationMs=ms;timerPausedLeft=null;
     pushRemote({timer:{secs:timerSecs,durationMs:ms,running:true,startedAt:now,remainingMs:null,pausedAt:null}});
   } else {
-    const elapsed   = timerStartedAt ? serverNow()-timerStartedAt : 0;
-    const remaining = Math.max(0, timerDurationMs-elapsed);
-    timerPausedLeft=remaining; timerStartedAt=null;
-    pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:remaining,pausedAt:now}});
+    const elapsed=timerStartedAt?serverNow()-timerStartedAt:0;
+    const rem=Math.max(0,timerDurationMs-elapsed);
+    timerPausedLeft=rem;timerStartedAt=null;
+    pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:rem,pausedAt:now}});
   }
 }
 
-function setPreset(mins, el) {
+function setPreset(mins,el){
   document.querySelectorAll('.t-pre').forEach(e=>e.classList.remove('on'));
-  if (el) el.classList.add('on');
-  timerSecs=mins*60; timerDurationMs=timerSecs*1000; timerLeft=timerSecs; timerPausedLeft=timerDurationMs;
-  stopLocalTick(); timerOn=false; lastSyncedSeconds=-1;
+  if(el)el.classList.add('on');
+  timerSecs=mins*60;timerDurationMs=timerSecs*1000;timerLeft=timerSecs;timerPausedLeft=timerDurationMs;
+  stopLocalTick();timerOn=false;lastSyncedSeconds=-1;
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
   pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:timerDurationMs,pausedAt:null}});
 }
-window.setPreset = setPreset;
+window.setPreset=setPreset;
 
-function setCustomTimer() {
+function setCustomTimer(){
   const v=parseInt(document.getElementById('t-custom-inp').value);
-  if (!v||v<1) return;
+  if(!v||v<1)return;
   document.querySelectorAll('.t-pre').forEach(e=>e.classList.remove('on'));
-  timerSecs=v*60; timerDurationMs=timerSecs*1000; timerLeft=timerSecs; timerPausedLeft=timerDurationMs;
-  stopLocalTick(); timerOn=false; lastSyncedSeconds=-1;
+  timerSecs=v*60;timerDurationMs=timerSecs*1000;timerLeft=timerSecs;timerPausedLeft=timerDurationMs;
+  stopLocalTick();timerOn=false;lastSyncedSeconds=-1;
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
   pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:timerDurationMs,pausedAt:null}});
 }
-window.setCustomTimer = setCustomTimer;
+window.setCustomTimer=setCustomTimer;
 
-function startTimer() {
-  if (timerOn) return;
-  const ms = timerPausedLeft !== null ? timerPausedLeft : timerDurationMs;
-  if (ms<=0) { timerDurationMs=timerSecs*1000; timerPausedLeft=timerDurationMs; }
+function startTimer(){
+  if(timerOn)return;
+  const ms=timerPausedLeft!==null?timerPausedLeft:timerDurationMs;
+  if(ms<=0){timerDurationMs=timerSecs*1000;timerPausedLeft=timerDurationMs;}
   timerOn=true;
   document.getElementById('t-play').style.display='none';
   document.getElementById('t-pause').style.display='flex';
-  pushTimerState(true, timerPausedLeft!==null?timerPausedLeft:timerDurationMs);
+  pushTimerState(true,timerPausedLeft!==null?timerPausedLeft:timerDurationMs);
   startLocalTick();
 }
-window.startTimer = startTimer;
+window.startTimer=startTimer;
 
-function pauseTimer() {
-  if (!timerOn) return;
-  timerOn=false; stopLocalTick();
+function pauseTimer(){
+  if(!timerOn)return;
+  timerOn=false;stopLocalTick();
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   pushTimerState(false);
 }
-window.pauseTimer = pauseTimer;
+window.pauseTimer=pauseTimer;
 
-function resetTimer() {
+function resetTimer(){
   stopLocalTick();
-  timerOn=false; timerLeft=timerSecs; timerDurationMs=timerSecs*1000;
-  timerPausedLeft=timerDurationMs; timerStartedAt=null; lastSyncedSeconds=-1;
+  timerOn=false;timerLeft=timerSecs;timerDurationMs=timerSecs*1000;
+  timerPausedLeft=timerDurationMs;timerStartedAt=null;lastSyncedSeconds=-1;
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
   pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:timerDurationMs,pausedAt:null}});
 }
-window.resetTimer = resetTimer;
+window.resetTimer=resetTimer;
 
-function toggleTimer() {
+function toggleTimer(){
   timerHide=!timerHide;
   const p=document.getElementById('timer-panel');
-  [...p.children].forEach(c=>{ if (!c.classList.contains('t-hide')) c.style.display=timerHide?'none':''; });
+  [...p.children].forEach(c=>{if(!c.classList.contains('t-hide'))c.style.display=timerHide?'none':'';});
   p.querySelector('.t-hide').textContent=timerHide?'Show Timer':'Hide Timer';
-  if (timerHide) pauseTimer();
+  if(timerHide)pauseTimer();
 }
-window.toggleTimer = toggleTimer;
+window.toggleTimer=toggleTimer;
 
-function showCountdown(n) {
-  if (cdBusy && n!==0) return;
+function showCountdown(n){
+  if(cdBusy&&n!==0)return;
   cdBusy=true;
   const ov=document.getElementById('cdown');
   const nm=document.getElementById('cdown-num');
-  nm.textContent = n===0?'🏁':n;
+  nm.textContent=n===0?'🏁':n;
   const fresh=nm.cloneNode(true);
   nm.parentNode.replaceChild(fresh,nm);
   fresh.style.animation='cPop .85s ease-out forwards';
@@ -725,359 +1522,60 @@ function showCountdown(n) {
   setTimeout(()=>{ov.classList.remove('show');cdBusy=false;},950);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// RENDER TEAMS  (DOM diffing — preserves focus, never wipes grid)
-// ══════════════════════════════════════════════════════════════════
-function renderTeams() {
-  const grid = document.getElementById('teams-grid');
-  const maxScore = localTeams.length ? Math.max(...localTeams.map(t=>t.score)) : 0;
-
-  // Remove stale boxes
-  grid.querySelectorAll('.team-box').forEach(box => {
-    if (!localTeams.find(t => String(t.id)===box.dataset.id)) box.remove();
-  });
-
-  localTeams.forEach((team, idx) => {
-    const col  = team.color || COLORS[idx%COLORS.length];
-    const step = team.step  || 1;
-    const lead = team.score===maxScore && localTeams.filter(t=>t.score===maxScore).length===1 && maxScore>0;
-    let box    = grid.querySelector(`.team-box[data-id="${team.id}"]`);
-
-    if (!box) {
-      box = document.createElement('div');
-      box.dataset.id = team.id;
-      box.innerHTML  = `
-        <div class="leader-crown">&#127942; Leading</div>
-        <div class="color-strip" style="background:${col}"></div>
-        <button class="rm-team" data-id="${team.id}">&#215;</button>
-        <input type="text" class="team-name" value="${esc(team.name)}" data-id="${team.id}" placeholder="Team Name">
-        <div class="ctrls">
-          <button class="bscore bminus" data-id="${team.id}" data-dir="-1">&#8722;</button>
-          <div class="score-num" id="sn-${team.id}">${team.score}</div>
-          <button class="bscore bplus"  data-id="${team.id}" data-dir="1">+</button>
-        </div>
-        <div class="steps">
-          ${[1,2,5,10].map(n=>`<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}">&plusmn;${n}</button>`).join('')}
-        </div>`;
-      grid.appendChild(box);
-    } else {
-      // Patch without touching the active input
-      const ni = box.querySelector('.team-name');
-      if (document.activeElement !== ni && ni.value !== team.name) ni.value = team.name;
-      const si = box.querySelector('.score-num');
-      if (si && si.textContent != team.score) si.textContent = team.score;
-      box.querySelectorAll('.step').forEach(b => b.classList.toggle('on', parseInt(b.dataset.step)===step));
-    }
-
-    box.className = 'team-box'+(lead?' leader':'');
-    const strip = box.querySelector('.color-strip');
-    if (strip) strip.style.background = col;
-  });
-
-  // Enforce order
-  localTeams.forEach((team, idx) => {
-    const box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
-    if (box && grid.children[idx]!==box) grid.insertBefore(box, grid.children[idx]||null);
-  });
-
-  // Attach handlers once
-  if (!grid._listenersAttached) {
-    grid._listenersAttached = true;
-    grid.addEventListener('click', e => {
-      const rm = e.target.closest('.rm-team');
-      const bs = e.target.closest('.bscore');
-      const st = e.target.closest('.step');
-      if (rm) removeTeam(parseInt(rm.dataset.id));
-      if (bs) changeScore(parseInt(bs.dataset.id), parseInt(bs.dataset.dir));
-      if (st) setStep(st, parseInt(st.dataset.id), parseInt(st.dataset.step));
-    });
-    grid.addEventListener('change', e => {
-      const tn = e.target.closest('.team-name');
-      if (tn) updateTeamName(parseInt(tn.dataset.id), tn.value);
-    });
-  }
-
-  rebuildDomCache();
+// ═══════════════════════════════════════════════════════════════
+// QR
+// ═══════════════════════════════════════════════════════════════
+function getShareUrl(){
+  if(location.protocol==='file:') return null;
+  return location.origin+location.pathname+'#'+ROOM_ID;
 }
-
-// patchScoresDOM: updates only score elements and leader highlights.
-// Called when only scores changed — zero structural DOM work.
-function patchScoresDOM() {
-  const max = localTeams.length ? Math.max(...localTeams.map(t=>t.score)) : 0;
-  localTeams.forEach(t => {
-    const el  = domCache.scoreEls[t.id]  || document.getElementById('sn-'+t.id);
-    const box = domCache.teamBoxes[t.id] || document.querySelector(`.team-box[data-id="${t.id}"]`);
-    if (el  && el.textContent != t.score) el.textContent = t.score;
-    if (box) {
-      const lead = t.score===max && localTeams.filter(x=>x.score===max).length===1 && max>0;
-      box.classList.toggle('leader', lead);
-    }
-  });
-}
-
-// ── DOM Cache (rebuilt after renderTeams) ─────────────────────────
-const domCache = {scoreEls:{}, teamBoxes:{}};
-function rebuildDomCache() {
-  domCache.scoreEls={}; domCache.teamBoxes={};
-  localTeams.forEach(t => {
-    domCache.scoreEls[t.id]  = document.getElementById('sn-'+t.id);
-    domCache.teamBoxes[t.id] = document.querySelector(`.team-box[data-id="${t.id}"]`);
-  });
-}
-
-let leaderRafPending = false;
-function renderLeaders() {
-  if (leaderRafPending) return;
-  leaderRafPending=true;
-  requestAnimationFrame(()=>{
-    leaderRafPending=false; patchScoresDOM();
-  });
-}
-
-// ══════════════════════════════════════════════════════════════════
-// TEAM ACTIONS
-// ══════════════════════════════════════════════════════════════════
-function getStep(teamId) {
-  const t = localTeams.find(t=>t.id===teamId);
-  if (t && t.step) return t.step;
-  const box = domCache.teamBoxes[teamId] || document.querySelector(`.team-box[data-id="${teamId}"]`);
-  const s   = box && box.querySelector('.step.on');
-  return s ? parseInt(s.dataset.step) : 1;
-}
-
-function addTeamUI() {
-  const id  = ++teamCtr;
-  const col = COLORS[localTeams.length % COLORS.length];
-  localTeams.push({id, name:'Team '+id, score:0, color:col});
-  renderTeams(); pushTeams(); updateStats();
-}
-window.addTeamUI = addTeamUI;
-
-function removeTeam(id) {
-  if (localTeams.length<=1) return;
-  localTeams = localTeams.filter(t=>t.id!==id);
-  renderTeams(); pushTeams(); updateStats();
-}
-
-function updateTeamName(id, val) {
-  const t = localTeams.find(t=>t.id===id);
-  if (t) { t.name=val; pushTeams(); }
-}
-
-function changeScore(id, dir) {
-  const step = getStep(id);
-  const t    = localTeams.find(t=>t.id===id);
-  if (!t) return;
-
-  // Optimistic local update — instant feedback
-  t.score = Math.max(0, t.score + dir*step);
-  const el = domCache.scoreEls[id] || document.getElementById('sn-'+id);
-  if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent=t.score; }
-  playDing(dir>0);
-  renderLeaders(); updateStats();
-
-  // Atomic increment on /scores/ID (string key).
-  // This path has its OWN onValue listener — no echo-skip issues.
-  // All devices (including the writer) receive the committed value via the scores listener.
-  runTransaction(ref(db, ROOT+'/scores/'+String(id)), current => {
-    const base = (current===null) ? t.score : current;
-    return Math.max(0, base + dir*step);
-  }).then(result => {
-    if (result.committed && result.snapshot.exists()) {
-      t.score = result.snapshot.val();
-      if (el) el.textContent = t.score;
-      renderLeaders(); updateStats();
-    }
-  }).catch(() => { pushTeamsDebounced(); });
-}
-
-function setStep(btn, teamId, n) {
-  const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
-  if (!box) return;
-  box.querySelectorAll('.step').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  const t = localTeams.find(t=>t.id===teamId);
-  if (t) { t.step=n; pushTeamsDebounced(); }
-}
-
-function resetAll() {
-  if (!confirm('Reset all scores to 0?')) return;
-  localTeams.forEach(t=>t.score=0);
-  roundNum++;
-  document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
-  renderTeams(); pushAll(); updateStats();
-  showToast('Round '+roundNum+' begins! 🎮');
-}
-window.resetAll = resetAll;
-
-// ══════════════════════════════════════════════════════════════════
-// SAVE / HISTORY
-// ══════════════════════════════════════════════════════════════════
-function saveGame() {
-  const entry = {
-    id:    Date.now(),
-    game:  document.getElementById('game-title').value || 'Score Board',
-    date:  new Date().toLocaleString(),
-    round: roundNum,
-    teams: localTeams.map(t=>({...t}))
-  };
-  runTransaction(ref(db, ROOT+'/history'), current => {
-    let h = current ? (Array.isArray(current)?current:Object.values(current)) : [];
-    h.unshift(entry);
-    if (h.length>60) h=h.slice(0,60);
-    return h;
-  }).then(result => {
-    if (result.committed) {
-      gameHistory = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : Object.values(result.snapshot.val());
-      renderHistory(); updateStats();
-      showToast('Game saved! 💾');
-    }
-  });
-}
-window.saveGame = saveGame;
-
-function renderHistory() {
-  const el = document.getElementById('hist-list');
-  if (!gameHistory.length) {
-    el.innerHTML='<div class="empty">No saved games yet — press Save Game after each round!</div>';
-    return;
-  }
-  el.innerHTML = gameHistory.map((e,i) => {
-    const max   = Math.max(...e.teams.map(t=>t.score));
-    const chips = e.teams.map(t => {
-      const w = t.score===max && e.teams.filter(x=>x.score===max).length===1;
-      return `<span class="chip${w?' win':''}" style="${w?'':'border-left:3px solid '+t.color}">${esc(t.name)}: ${t.score}</span>`;
-    }).join('');
-    return `<div class="hist-card">
-      <div class="hist-date">${e.date}</div>
-      <div style="flex:1">
-        <div class="hist-name">${esc(e.game)} &middot; Round ${e.round}</div>
-        <div class="hist-chips" style="margin-top:6px">${chips}</div>
-      </div>
-      <button class="hist-restore" data-idx="${i}">&#8617; Restore</button>
-      <button class="hist-del" data-idx="${i}">&#128465;</button>
-    </div>`;
-  }).join('');
-
-  el.onclick = e => {
-    const r=e.target.closest('.hist-restore');
-    const d=e.target.closest('.hist-del');
-    if (r) restoreGame(parseInt(r.dataset.idx));
-    if (d) delHistory(parseInt(d.dataset.idx));
-  };
-}
-
-function restoreGame(idx) {
-  const e = gameHistory[idx];
-  if (!confirm('Restore "'+e.game+'" Round '+e.round+'?')) return;
-  document.getElementById('game-title').value = e.game;
-  autoSize(document.getElementById('game-title'));
-  localTeams = e.teams.map(t=>({...t}));
-  teamCtr    = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
-  roundNum   = e.round;
-  document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
-  renderTeams(); pushAll(); updateStats();
-  showToast('Restored! ↩');
-}
-
-function delHistory(idx) {
-  const entryId = gameHistory[idx]?.id;
-  if (!entryId) return;
-  runTransaction(ref(db, ROOT+'/history'), current => {
-    let h = current ? (Array.isArray(current)?current:Object.values(current)) : [];
-    h = h.filter(e=>e.id!==entryId);
-    return h;
-  }).then(result => {
-    if (result.committed) {
-      const v = result.snapshot.val();
-      gameHistory = v ? (Array.isArray(v)?v:Object.values(v)) : [];
-      renderHistory(); updateStats();
-    }
-  });
-}
-
-// ══════════════════════════════════════════════════════════════════
-// STATS
-// ══════════════════════════════════════════════════════════════════
-function updateStats() {
-  const total  = localTeams.reduce((a,t)=>a+t.score,0);
-  const sorted = [...localTeams].sort((a,b)=>b.score-a.score);
-  const leader = sorted[0];
-  const gap    = sorted.length>1 ? sorted[0].score-sorted[1].score : 0;
-  document.getElementById('stats').innerHTML=`
-    <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${total}</div></div>
-    <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:1rem;padding-top:6px">${leader?esc(leader.name):'—'}</div></div>
-    <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${gap}</div></div>
-    <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${gameHistory.length}</div></div>
-    <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
-  `;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// QR / SHARE
-// ══════════════════════════════════════════════════════════════════
-function getShareUrl() {
-  if (location.protocol==='file:') return null;
-  return location.origin + location.pathname + '#' + ROOM_ID;
-}
-
-function openQR() {
-  const url = getShareUrl();
-  if (!url) { showToast('⚠️ Host this file on a web server to share via QR'); return; }
-  document.getElementById('qr-url-text').textContent = url;
-  if (!qrGenerated) {
+function openQR(){
+  const url=getShareUrl();
+  if(!url){showToast('⚠️ Host this file on a web server to share via QR',true);return;}
+  document.getElementById('qr-url-text').textContent=url;
+  if(!qrGenerated){
     document.getElementById('qr-box').innerHTML='';
-    new QRCode(document.getElementById('qr-box'),{
-      text:url, width:220, height:220,
-      colorDark:'#f5c842', colorLight:'#10131a',
-      correctLevel:QRCode.CorrectLevel.H
-    });
+    new QRCode(document.getElementById('qr-box'),{text:url,width:220,height:220,
+      colorDark:'#f5c842',colorLight:'#10131a',correctLevel:QRCode.CorrectLevel.H});
     qrGenerated=true;
   }
   document.getElementById('qr-modal').classList.add('show');
 }
-function closeQR() { document.getElementById('qr-modal').classList.remove('show'); }
-window.openQR  = openQR;
-window.closeQR = closeQR;
-document.getElementById('qr-modal').addEventListener('click', e => {
-  if (e.target===document.getElementById('qr-modal')) closeQR();
+function closeQR(){document.getElementById('qr-modal').classList.remove('show');}
+window.openQR=openQR; window.closeQR=closeQR;
+document.getElementById('qr-modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('qr-modal'))closeQR();
 });
 
-// ══════════════════════════════════════════════════════════════════
-// TITLE SYNC
-// ══════════════════════════════════════════════════════════════════
-let titleDB;
-function syncTitle() {
-  clearTimeout(titleDB);
-  titleDB = setTimeout(()=>pushRemote({title:document.getElementById('game-title').value}),600);
-}
-window.syncTitle = syncTitle;
-
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // CLOCK / UTILS
-// ══════════════════════════════════════════════════════════════════
-function updateClock() {
-  const now = new Date();
-  document.getElementById('date-disp').textContent =
-    now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-  document.getElementById('time-disp').textContent =
-    now.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+// ═══════════════════════════════════════════════════════════════
+function updateClock(){
+  const now=new Date();
+  const dd=document.getElementById('date-disp');
+  const td=document.getElementById('time-disp');
+  if(dd) dd.textContent=now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  if(td) td.textContent=now.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
 }
-
-function autoSize(el) { el.style.width='10px'; el.style.width=(el.scrollWidth+6)+'px'; }
-function esc(s) {
+function autoSize(el){el.style.width='10px';el.style.width=(el.scrollWidth+6)+'px';}
+function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function showToast(msg) {
+function fmtScore(n){ return Number(n||0).toLocaleString(); }
+
+let toastTimer;
+function showToast(msg, isErr=false){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2600);
+  t.textContent=msg;
+  t.className='toast show'+(isErr?' err':'');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
 }
-function showError(msg) {
+function showError(msg){
   const b=document.getElementById('err-banner');
-  b.textContent='⚠️ '+msg; b.classList.add('show');
+  if(b){b.textContent='⚠️ '+msg;b.classList.add('show');}
 }
-window.autoSize = autoSize;
+window.autoSize=autoSize;
 
 </script>
 </body>
