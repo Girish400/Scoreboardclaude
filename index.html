@@ -491,7 +491,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
 <script type="module">
 import { initializeApp }  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, update, onValue, runTransaction, remove, push }
+import { getDatabase, ref, update, onValue, runTransaction, remove, push, get }
                           from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -504,7 +504,8 @@ const db  = getDatabase(app);
 // Get room ID from URL hash only -- do NOT auto-generate at load time.
 // The host generates a new ID when they click "Create Room".
 function getExistingRoomId() {
-  const h = location.hash.replace('#','').trim();
+  // Normalise to lowercase — some apps/browsers uppercase URL fragments
+  const h = location.hash.replace('#','').trim().toLowerCase();
   if (h && /^[a-z0-9]{6,16}$/.test(h)) return h;
   return null;
 }
@@ -739,49 +740,54 @@ function attemptHostCreate() {
   window.history.replaceState(null, '', '#' + newRoomId);
 
   const pid = MY_PLAYER_ID;
-  runTransaction(ref(db, hostRoot), cur => {
-    // Only abort if room already has meaningful data (state field present)
-    if (cur && cur.state) return; // collision -- abort
-    return {
-      state: 'lobby', hostId: pid, title, round: 1,
-      currentTurn: null, turnIndex: 0, turnOrder: [],
-      players: { [pid]: { name, color: COLORS[0], score: 0,
-                           joinedAt: serverNow(), turnSubmitted: false, isHost: true } },
-      history: [], lastScore: null,
-      timer: { secs: 60, durationMs: 60000, running: false,
-               startedAt: null, remainingMs: 60000, pausedAt: null }
-    };
-  }).then(result => {
-    btn.disabled = false;
-    btn.textContent = 'Create Room';
-    if (!result.committed) {
-      nameErr.textContent = 'Room conflict -- please try again.';
+  const roomData = {
+    state: 'lobby', hostId: pid, title, round: 1,
+    currentTurn: null, turnIndex: 0, turnOrder: [],
+    players: { [pid]: { name, color: COLORS[0], score: 0,
+                         joinedAt: serverNow(), turnSubmitted: false, isHost: true } },
+    history: {}, lastScore: null,
+    timer: { secs: 60, durationMs: 60000, running: false,
+             startedAt: null, remainingMs: 60000, pausedAt: null }
+  };
+
+  // Use get() to check for collision, then update() to write.
+  // Avoids the Firebase RTDB runTransaction null-first-call problem
+  // which would silently abort and show a blank page.
+  get(ref(db, hostRoot))
+    .then(snap => {
+      if (snap.exists() && snap.val() && snap.val().state) {
+        // Room ID collision — generate a new one and retry
+        throw new Error('COLLISION');
+      }
+      return update(ref(db, hostRoot), roomData);
+    })
+    .then(() => {
+      btn.disabled = false;
+      btn.textContent = 'Create Room →';
+      hideModal('host-modal');
+      document.getElementById('game-title').value = title;
+      autoSize(document.getElementById('game-title'));
+      // Show lobby immediately without waiting for Firebase onValue
+      gameState  = 'lobby';
+      hostId     = pid;
+      players    = roomData.players;
+      localTeams = playersToTeams(players);
+      renderView(true);
+      setupFirebase(hostRoot);
+      showToast('Room created! Share the code. 🎉');
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Create Room →';
       MY_PLAYER_ID = null;
       localStorage.removeItem(pidKey);
       window.history.replaceState(null, '', location.pathname);
-      return;
-    }
-    hideModal('host-modal');
-    document.getElementById('game-title').value = title;
-    autoSize(document.getElementById('game-title'));
-    // Show lobby immediately (don't wait for Firebase onValue)
-    // applyRemoteState will re-render once Firebase confirms
-    gameState = 'lobby';
-    hostId    = pid;
-    players   = { [pid]: { name, color: COLORS[0], score: 0,
-                            joinedAt: Date.now(), turnSubmitted: false, isHost: true } };
-    localTeams = playersToTeams(players);
-    renderView(true);
-    setupFirebase(hostRoot);
-    showToast('Room created! Share the code. 🎉');
-  }).catch(() => {
-    btn.disabled = false;
-    btn.textContent = 'Create Room';
-    nameErr.textContent = 'Connection error -- try again.';
-    MY_PLAYER_ID = null;
-    localStorage.removeItem(pidKey);
-    window.history.replaceState(null, '', location.pathname);
-  });
+      if (err.message === 'COLLISION') {
+        nameErr.textContent = 'Room ID conflict — please try again.';
+      } else {
+        nameErr.textContent = 'Connection error — check your internet and try again.';
+      }
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -791,7 +797,8 @@ function showJoinModal(prefilledCode) {
   showModal('join-modal');
   const codeEl = document.getElementById('join-code');
   if (prefilledCode) {
-    codeEl.value = prefilledCode.toUpperCase();
+    // Store as lowercase internally; CSS text-transform:uppercase handles display
+    codeEl.value = prefilledCode.toLowerCase();
     requestAnimationFrame(()=>requestAnimationFrame(()=>
       document.getElementById('join-name').focus()));
   } else {
@@ -819,6 +826,7 @@ function attemptJoin() {
   const nameErrEl = document.getElementById('join-err');
   const btn       = document.getElementById('btn-join-ok');
 
+  // Always normalise to lowercase — the input may display uppercase via CSS
   const code = codeEl.value.trim().toLowerCase();
   const name = nameEl.value.trim();
   let valid  = true;
@@ -849,66 +857,87 @@ function attemptJoin() {
   btn.disabled = true;
   btn.textContent = 'Joining…';
 
-  // Point to the room the player typed
-  const joinRoot = 'rooms/' + code;
-
-  MY_PLAYER_ID = makePID();
+  const joinRoot   = 'rooms/' + code;
   const joinPidKey = 'sb_pid_' + code;
-  localStorage.setItem(joinPidKey, MY_PLAYER_ID);
 
-  runTransaction(ref(db, joinRoot), cur => {
-    if (!cur) return; // room doesn't exist — abort
-    if (cur.state !== 'lobby') return; // game already started — abort
-    const existingNames = Object.values(cur.players||{}).map(p=>p.name.toLowerCase());
-    if (existingNames.includes(name.toLowerCase())) return; // duplicate name — abort
-    const colorIdx = Object.keys(cur.players||{}).length % COLORS.length;
-    cur.players = cur.players || {};
-    cur.players[MY_PLAYER_ID] = {
-      name, color: COLORS[colorIdx], score: 0,
-      joinedAt: serverNow(), turnSubmitted: false
-    };
-    return cur;
-  }).then(result => {
-    btn.disabled = false;
-    btn.textContent = 'Join Game →';
-    if (!result.committed) {
-      MY_PLAYER_ID = null;
-      localStorage.removeItem(joinPidKey);
-      const snap = result.snapshot ? result.snapshot.val() : null;
-      if (!snap) {
+  // ── Use get() to READ the room first, then write the player ──
+  // WHY: Firebase RTDB runTransaction() always calls its update fn
+  // with null on the first invocation for a client that has never
+  // cached that path. `if (!cur) return` aborts immediately → 
+  // committed=false → "Room not found" even when the room exists.
+  // get() does a direct one-time read and never has this null issue.
+  get(ref(db, joinRoot))
+    .then(snap => {
+      const roomData = snap.val();
+
+      // ── Validate room ──
+      if (!roomData) {
+        btn.disabled = false;
+        btn.textContent = 'Join Game →';
         codeEl.classList.add('err');
         codeErrEl.textContent = 'Room not found. Check the code and try again.';
-      } else if (snap.state !== 'lobby') {
+        return;
+      }
+      if (roomData.state !== 'lobby') {
+        btn.disabled = false;
+        btn.textContent = 'Join Game →';
         codeEl.classList.add('err');
         codeErrEl.textContent = 'Game already started — cannot join now.';
-      } else {
+        return;
+      }
+      const existingNames = Object.values(roomData.players || {}).map(p => p.name.toLowerCase());
+      if (existingNames.includes(name.toLowerCase())) {
+        btn.disabled = false;
+        btn.textContent = 'Join Game →';
         nameEl.classList.add('err');
         nameErrEl.textContent = 'That name is taken. Choose another.';
+        return;
       }
-      return;
-    }
-    // Successfully joined — update ROOM_ID context and connect
-    window.history.replaceState(null, '', '#' + code);
-    hideModal('join-modal');
-    // Show lobby immediately with known player info
-    gameState = 'lobby';
-    const joinedSnap = result.snapshot.val();
-    if (joinedSnap && joinedSnap.players) {
-      hostId    = joinedSnap.hostId || null;
-      players   = joinedSnap.players;
-      localTeams = playersToTeams(players);
-    }
-    renderView(true);
-    setupFirebaseWithRoot(joinRoot);
-    showToast('Joined! Waiting for host to start 🎮');
-  }).catch(() => {
-    btn.disabled = false;
-    btn.textContent = 'Join Game →';
-    codeErrEl.textContent = 'Connection error — try again.';
-    MY_PLAYER_ID = null;
-    const joinPidKey2 = 'sb_pid_' + code;
-    localStorage.removeItem(joinPidKey2);
-  });
+
+      // ── Write the new player with a targeted update() ──
+      // Player IDs are random UUIDs — concurrent joins won't collide.
+      const pid      = makePID();
+      const colorIdx = Object.keys(roomData.players || {}).length % COLORS.length;
+      const newPlayer = {
+        name, color: COLORS[colorIdx], score: 0,
+        joinedAt: serverNow(), turnSubmitted: false
+      };
+
+      MY_PLAYER_ID = pid;
+      localStorage.setItem(joinPidKey, pid);
+
+      return update(ref(db, joinRoot + '/players'), { [pid]: newPlayer })
+        .then(() => {
+          // Read the room again to get full fresh state for immediate render
+          return get(ref(db, joinRoot));
+        })
+        .then(freshSnap => {
+          btn.disabled = false;
+          btn.textContent = 'Join Game →';
+
+          const freshData = freshSnap.val();
+          window.history.replaceState(null, '', '#' + code);
+          hideModal('join-modal');
+
+          // Render lobby immediately from fresh data
+          gameState  = 'lobby';
+          hostId     = freshData ? (freshData.hostId || null) : null;
+          players    = freshData ? (freshData.players || {}) : {};
+          localTeams = playersToTeams(players);
+          renderView(true);
+
+          setupFirebaseWithRoot(joinRoot);
+          showToast('Joined! Waiting for host to start 🎮');
+        });
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Join Game →';
+      codeErrEl.textContent = 'Connection error — try again.';
+      MY_PLAYER_ID = null;
+      localStorage.removeItem(joinPidKey);
+      console.error('Join error:', err);
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
