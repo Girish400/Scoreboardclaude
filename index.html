@@ -210,202 +210,221 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
   <div class="hist-list" id="hist-list"></div>
 </div>
 
-<script type="module">
-import { initializeApp }           from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, set,
-         update, onValue,
-         runTransaction }            from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
-// ══ FIREBASE ══════════════════════════════════════════
+<script type="module">
+import { initializeApp }  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getDatabase, ref, update, onValue, runTransaction }
+                          from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+// ══════════════════════════════════════════════════════════════════
+// FIREBASE + ROOM SETUP
+// ══════════════════════════════════════════════════════════════════
 const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-// ── Per-session identity — declared here so setupFirebase() can use it ────────
-const CLIENT_ID   = Math.random().toString(36).slice(2);
-let   localWriteSeq = 0;
-
-// Each room gets its own Firebase path derived from the URL hash.
-// Sharing the URL (including hash) connects others to the same room.
-// A fresh load with no hash generates a new room ID and sets the hash.
-// NOTE: uses window.history explicitly to avoid shadowing by the gameHistory array.
+// Room ID from URL hash — each hash = isolated room.
+// window.history used explicitly (our gameHistory variable would shadow plain `history`).
 function getRoomId() {
-  const hash = location.hash.replace('#', '').trim();
-  if (hash && /^[a-z0-9]{6,16}$/.test(hash)) return hash;
-  const newId = Math.random().toString(36).slice(2, 10);
-  window.history.replaceState(null, '', '#' + newId);
-  return newId;
+  const h = location.hash.replace('#','').trim();
+  if (h && /^[a-z0-9]{6,16}$/.test(h)) return h;
+  const id = Math.random().toString(36).slice(2,10);
+  window.history.replaceState(null,'','#'+id);
+  return id;
 }
 const ROOM_ID = getRoomId();
-const ROOT = 'rooms/' + ROOM_ID;
+const ROOT    = 'rooms/' + ROOM_ID;
 
-// ══ AUDIO ═════════════════════════════════════════════
-// All sounds generated via Web Audio API — no external files needed, works offline too
+// Per-session write identity.
+// CRITICAL: declared before setupFirebase() — the onValue callback references these.
+const CLIENT_ID    = Math.random().toString(36).slice(2);
+let   localWriteSeq = 0;
+
+// Track sequence numbers WE pushed so we can skip our own echoes.
+// Using a Set means only the exact writes we made are skipped;
+// writes from other devices (which have different _cid) always pass through.
+const myEchoSet = new Set();
+
+// Server time offset for cross-device timer accuracy.
+// Declared before setupFirebase() to avoid temporal dead zone risk.
+let serverOffset = 0;
+function serverNow() { return Date.now() + serverOffset; }
+
+// localStorage key scoped to this room so multiple rooms don't collide.
+const LS_KEY = 'sb_' + ROOM_ID;
+
+// ══════════════════════════════════════════════════════════════════
+// AUDIO  (Web Audio API — no external files needed)
+// ══════════════════════════════════════════════════════════════════
 let audioCtx = null;
-
 function getAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-
-// Safe audio play — resumes context first (handles remote-triggered sounds with no gesture)
+// withAudio: resumes context before creating nodes — safe for remote-triggered sounds
+// where there may be no prior user gesture on this device.
 function withAudio(fn) {
   try {
     const ctx = getAudioCtx();
     if (ctx.state === 'suspended') {
       ctx.resume().then(() => { try { fn(ctx); } catch(e){} }).catch(()=>{});
-    } else {
-      fn(ctx);
-    }
+    } else { fn(ctx); }
   } catch(e) {}
 }
-
-// Bright ding for score change
-function playDing(isAdd = true) {
+function playDing(isAdd=true) {
   withAudio(ctx => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(isAdd ? 880 : 440, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(isAdd ? 1320 : 330, ctx.currentTime + 0.08);
-    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35);
-    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+    const osc=ctx.createOscillator(), g=ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type='sine';
+    osc.frequency.setValueAtTime(isAdd?880:440, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(isAdd?1320:330, ctx.currentTime+0.08);
+    g.gain.setValueAtTime(0.4,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.35);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.35);
+    osc.onended=()=>{osc.disconnect();g.disconnect();};
   });
 }
-
-// Urgent beep for countdown 3-2-1
-function playBeep(freq = 880) {
+function playBeep(freq=880) {
   withAudio(ctx => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    gain.gain.setValueAtTime(0.35, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.25);
-    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+    const osc=ctx.createOscillator(), g=ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.type='square';
+    osc.frequency.setValueAtTime(freq,ctx.currentTime);
+    g.gain.setValueAtTime(0.35,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.25);
+    osc.onended=()=>{osc.disconnect();g.disconnect();};
   });
 }
-
-// Fanfare / alarm when timer hits 0
 function playAlarm() {
   withAudio(ctx => {
-    const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = 'triangle';
-      const t = ctx.currentTime + i * 0.18;
-      osc.frequency.setValueAtTime(freq, t);
-      gain.gain.setValueAtTime(0.4, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-      osc.start(t); osc.stop(t + 0.35);
-      osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+    [523,659,784,1047].forEach((freq,i) => {
+      const osc=ctx.createOscillator(), g=ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type='triangle';
+      const t=ctx.currentTime+i*0.18;
+      osc.frequency.setValueAtTime(freq,t);
+      g.gain.setValueAtTime(0.4,t);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+      osc.start(t); osc.stop(t+0.35);
+      osc.onended=()=>{osc.disconnect();g.disconnect();};
     });
   });
 }
 
-// ══ STATE ═════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
 const COLORS = ['#f5c842','#34d97b','#f07844','#4f8ef7','#a78bfa','#f0504d','#22d3ee'];
-let localTeams    = [];
-let gameHistory   = [];
-let roundNum      = 1;
-let timerSecs     = 60;
-let timerLeft     = 60;
-let timerOn       = false;
-let timerInt      = null;
-let timerHide     = false;
-let cdBusy        = false;
-let teamCtr       = 0;
-let qrGenerated   = false;
-// For synced timer: track server start timestamp
-let timerStartedAt    = null; // server ms when timer last started/resumed
-let timerDurationMs   = 60000;// total duration ms for current round
-let timerPausedLeft   = null; // ms remaining when paused (local fallback only)
-let lastSyncedSeconds = -1;   // avoid re-rendering same value
+let localTeams        = [];
+let gameHistory       = [];
+let roundNum          = 1;
+let timerSecs         = 60;
+let timerLeft         = 60;
+let timerOn           = false;
+let timerInt          = null;
+let timerHide         = false;
+let cdBusy            = false;
+let teamCtr           = 0;
+let qrGenerated       = false;
+let timerStartedAt    = null;
+let timerDurationMs   = 60000;
+let timerPausedLeft   = null;
+let lastSyncedSeconds = -1;
 
-// ══ INIT ══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
 updateClock();
 setInterval(updateClock, 1000);
 renderTimerDisplay(timerSecs);
 autoSize(document.getElementById('game-title'));
-// Restore last known state immediately (before Firebase responds) so offline users see scores
-const hadLocal = loadLocal();
+loadLocal();   // show cached state immediately while Firebase connects
 setupFirebase();
 
-// ══ SERVER TIME OFFSET ════════════════════════════════
-let serverOffset = 0;
-
-function serverNow() { return Date.now() + serverOffset; }
-
-// ══ FIREBASE SETUP ════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// FIREBASE SETUP
+// ══════════════════════════════════════════════════════════════════
 function setupFirebase() {
-  // Sync server time offset for accurate cross-device timer
-  onValue(ref(db, '.info/serverTimeOffset'), snap => {
-    serverOffset = snap.val() || 0;
-  });
+  // Server time sync
+  onValue(ref(db,'.info/serverTimeOffset'), s => { serverOffset = s.val()||0; });
 
-  // Mobile audio context resume on first touch
-  document.body.addEventListener('touchstart', () => {
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-  }, { once: true });
-
-  onValue(ref(db, '.info/connected'), snap => {
-    const on = snap.val();
-    document.getElementById('conn-dot').className = 'conn-dot ' + (on ? 'online' : 'offline');
+  // Connection status
+  onValue(ref(db,'.info/connected'), s => {
+    const on = s.val();
+    document.getElementById('conn-dot').className = 'conn-dot '+(on?'online':'offline');
     document.getElementById('conn-text').textContent = on ? 'Connected' : 'Offline — reconnecting…';
   });
 
-  // Track the highest sequence number seen from ourselves so we can
-  // skip echoes of our own writes even if they arrive out-of-order
+  // Mobile audio unlock on first touch
+  document.body.addEventListener('touchstart', () => {
+    if (audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+  }, {once:true});
+
+  // Main room listener.
+  // Echo-skip logic: we check whether this specific snapshot was triggered by one
+  // of our own writes. We do this by comparing _cid + _seq against our myEchoSet.
+  // IMPORTANT: writes from OTHER devices (different _cid) ALWAYS pass through.
+  // Score transactions (runTransaction) do NOT set _cid/_seq, so they also always
+  // pass through — all devices including the writer see the committed value.
   onValue(ref(db, ROOT), snap => {
     const data = snap.val();
     if (!data) { pushDefaults(); return; }
-    // Skip our own echo: same clientId AND sequence we already wrote
-    if (data._cid === CLIENT_ID && data._seq && data._seq <= localWriteSeq) {
+
+    // Skip only our own echoes — identified by client ID + exact sequence number
+    const echoKey = data._cid + ':' + data._seq;
+    if (data._cid === CLIENT_ID && myEchoSet.has(echoKey)) {
+      myEchoSet.delete(echoKey); // consume it — don't let it block future updates
       return;
     }
     applyRemoteState(data);
-  }, err => {
-    showError('Firebase error: ' + err.message);
+  }, err => { showError('Firebase error: '+err.message); });
+
+  // ── Separate scores listener ──────────────────────────────────
+  // Scores are written via runTransaction directly to ROOT/scores/ID.
+  // This listener fires whenever ANY score changes, independent of the
+  // main pushRemote mechanism — so it has no echo-skip issue at all.
+  // This is what actually propagates score changes to all devices reliably.
+  onValue(ref(db, ROOT+'/scores'), snap => {
+    const scores = snap.val();
+    if (!scores) return;
+    let changed = false;
+    localTeams.forEach(t => {
+      const s = scores[String(t.id)];
+      if (s !== undefined && s !== t.score) { t.score = s; changed = true; }
+    });
+    if (changed) { patchScoresDOM(); updateStats(); saveLocal(); }
   });
 }
 
 function pushDefaults() {
-  // Use a transaction so only the FIRST device to see null initializes the room.
-  // If two devices simultaneously see null, only one wins — the other retries and
-  // finds data already there, so it aborts without overwriting.
-  runTransaction(ref(db, ROOT), current => {
-    if (current !== null) return; // already initialized — abort
+  // Only the first device to see null initialises the room; others abort.
+  runTransaction(ref(db,ROOT), current => {
+    if (current !== null) return; // abort — already exists
+    const teams = [
+      {id:1,name:'Team 1',score:0,color:COLORS[0]},
+      {id:2,name:'Team 2',score:0,color:COLORS[1]}
+    ];
     return {
-      title: 'Score Board', round: 1,
-      teams: [
-        { id:1, name:'Team 1', score:0, color:COLORS[0] },
-        { id:2, name:'Team 2', score:0, color:COLORS[1] }
-      ],
-      teams_obj: {
-        1: { id:1, name:'Team 1', score:0, color:COLORS[0] },
-        2: { id:2, name:'Team 2', score:0, color:COLORS[1] }
-      },
-      history: [],
-      timer: { secs: 60, durationMs: 60000, running: false, startedAt: null, remainingMs: 60000, pausedAt: null }
+      title:'Score Board', round:1,
+      teams, scores:{'1':0,'2':0},
+      history:[],
+      timer:{secs:60,durationMs:60000,running:false,startedAt:null,remainingMs:60000,pausedAt:null}
     };
   }).then(result => {
     if (result.committed) {
-      // We were the initializer — set local state
-      localTeams = result.snapshot.val().teams;
-      teamCtr = 2;
+      const d = result.snapshot.val();
+      localTeams = d.teams;
+      teamCtr    = 2;
       renderTeams(); updateStats();
     }
-    // If not committed, the onValue listener will fire with the existing data
+    // If not committed, onValue fires with existing data → applyRemoteState handles it
   });
 }
 
+// ══════════════════════════════════════════════════════════════════
+// APPLY REMOTE STATE  (called when another device's write arrives)
+// ══════════════════════════════════════════════════════════════════
 function applyRemoteState(data) {
   // Title
   if (data.title !== undefined) {
@@ -415,37 +434,32 @@ function applyRemoteState(data) {
   // Round
   if (data.round !== undefined) {
     roundNum = data.round;
-    document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+    document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
   }
-  // Teams — surgical update: only re-render if structure changed (add/remove/rename)
+  // Teams — DOM diffing: only rebuild if structure changed; patch scores in-place otherwise
   if (data.teams) {
     const incoming = Array.isArray(data.teams) ? data.teams : Object.values(data.teams);
-    // Reconcile any id-keyed score updates from teams_obj (atomic transactions)
-    if (data.teams_obj) {
+
+    // Merge scores from dedicated /scores node (most up-to-date)
+    if (data.scores) {
       incoming.forEach(t => {
-        const obj = data.teams_obj[t.id];
-        if (obj && obj.score !== undefined) t.score = obj.score;
+        const s = data.scores[String(t.id)];
+        if (s !== undefined) t.score = s;
       });
     }
-    const structureChanged =
+
+    const structChanged =
       incoming.length !== localTeams.length ||
-      incoming.some((t, i) => t.id !== localTeams[i]?.id || t.name !== localTeams[i]?.name || t.color !== localTeams[i]?.color);
+      incoming.some((t,i) => t.id !== localTeams[i]?.id ||
+                              t.name !== localTeams[i]?.name ||
+                              t.color !== localTeams[i]?.color);
     localTeams = incoming;
-    teamCtr = Math.max(teamCtr, ...localTeams.map(t => t.id || 0));
-    if (structureChanged) {
+    teamCtr = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
+
+    if (structChanged) {
       renderTeams();
     } else {
-      // Only patch scores and leader status — zero DOM thrash
-      const maxScore = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
-      localTeams.forEach(t => {
-        const el  = domCache.scoreEls[t.id]  || document.getElementById('sn-' + t.id);
-        const box = domCache.teamBoxes[t.id] || document.querySelector(`.team-box[data-id="${t.id}"]`);
-        if (el && el.textContent != t.score) el.textContent = t.score;
-        if (box) {
-          const lead = t.score === maxScore && localTeams.filter(x => x.score === maxScore).length === 1 && maxScore > 0;
-          box.classList.toggle('leader', lead);
-        }
-      });
+      patchScoresDOM();
     }
   }
   // History
@@ -453,51 +467,132 @@ function applyRemoteState(data) {
     gameHistory = Array.isArray(data.history) ? data.history : Object.values(data.history);
     renderHistory();
   }
-  // Timer sync
-  if (data.timer) {
-    syncTimerFromRemote(data.timer);
-  }
+  // Timer
+  if (data.timer) syncTimerFromRemote(data.timer);
+
   updateStats();
+  saveLocal();
 }
 
-// ══ TIMER SYNC ════════════════════════════════════════
-// Timer schema in Firebase (all timestamps are server ms):
-//   timer.durationMs  — total duration in ms for this round
+// ══════════════════════════════════════════════════════════════════
+// PUSH HELPERS
+// ══════════════════════════════════════════════════════════════════
+
+// pushRemote: tags the write with CLIENT_ID + seq so we can identify
+// our own echo and skip it. Uses myEchoSet for O(1) echo detection.
+function pushRemote(partial) {
+  localWriteSeq++;
+  partial._cid = CLIENT_ID;
+  partial._seq = localWriteSeq;
+  myEchoSet.add(CLIENT_ID + ':' + localWriteSeq);
+  // Clean up old echo keys to prevent unbounded growth
+  if (myEchoSet.size > 50) {
+    const first = myEchoSet.values().next().value;
+    myEchoSet.delete(first);
+  }
+  update(ref(db,ROOT), partial);
+  saveLocal();
+}
+
+function pushTeams() {
+  // Build flat scores map to keep /scores in sync with team data
+  const scores = {};
+  localTeams.forEach(t => { scores[String(t.id)] = t.score; });
+  pushRemote({ teams:localTeams, scores });
+}
+
+function pushAll() {
+  const scores = {};
+  localTeams.forEach(t => { scores[String(t.id)] = t.score; });
+  pushRemote({
+    title:   document.getElementById('game-title').value,
+    round:   roundNum,
+    teams:   localTeams,
+    scores,
+    history: gameHistory
+  });
+}
+
+let teamPushTimer = null;
+function pushTeamsDebounced() {
+  clearTimeout(teamPushTimer);
+  teamPushTimer = setTimeout(() => pushTeams(), 120);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOCAL PERSISTENCE  (survives refresh while offline)
+// ══════════════════════════════════════════════════════════════════
+function saveLocal() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      title:   document.getElementById('game-title').value,
+      round:   roundNum,
+      teams:   localTeams,
+      history: gameHistory,
+      savedAt: Date.now()
+    }));
+  } catch(e) {}
+}
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || Date.now()-d.savedAt > 86400000) return; // expire after 24h
+    if (d.title) {
+      const el = document.getElementById('game-title');
+      el.value = d.title; autoSize(el);
+    }
+    if (d.round) {
+      roundNum = d.round;
+      document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
+    }
+    if (d.teams && d.teams.length) {
+      localTeams = d.teams;
+      teamCtr    = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
+      renderTeams();
+    }
+    if (d.history) { gameHistory = d.history; renderHistory(); }
+    updateStats();
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TIMER
+// ══════════════════════════════════════════════════════════════════
+// Schema stored in Firebase:
+//   timer.durationMs  — full duration for this segment (ms)
 //   timer.running     — boolean
-//   timer.startedAt   — server ms when last started/resumed (running=true only)
-//   timer.remainingMs — ms remaining at the moment of pause (running=false only)
-//   timer.pausedAt    — server ms when paused (for deterministic pause race resolution)
+//   timer.startedAt   — server ms when started/resumed
+//   timer.remainingMs — ms left at pause moment
+//   timer.pausedAt    — server ms when paused (tie-breaking)
 //
-// When running:  remaining = durationMs - (serverNow() - startedAt)  [never stale]
-// When paused:   remaining = remainingMs  [set atomically at pause moment]
+// Running:  remaining = durationMs − (serverNow() − startedAt)
+// Paused:   remaining = remainingMs
 
 function syncTimerFromRemote(t) {
-  timerSecs = Math.round((t.durationMs || t.secs * 1000 || 60000) / 1000);
+  timerSecs = Math.round((t.durationMs || (t.secs||60)*1000) / 1000);
 
   if (t.running && t.startedAt) {
-    // ALWAYS recompute from server timestamps — never trust local timerPausedLeft
-    const elapsed = serverNow() - t.startedAt;
-    const leftMs  = Math.max(0, (t.durationMs || timerSecs * 1000) - elapsed);
-    timerLeft = Math.floor(leftMs / 1000);
-    timerOn   = true;
-    // Store for local tick use
+    const leftMs = Math.max(0, (t.durationMs||timerSecs*1000) - (serverNow()-t.startedAt));
+    timerLeft       = Math.floor(leftMs/1000);
+    timerOn         = true;
     timerStartedAt  = t.startedAt;
-    timerDurationMs = t.durationMs || timerSecs * 1000;
-    stopLocalTick();
-    lastSyncedSeconds = -1;
-    startLocalTick();
+    timerDurationMs = t.durationMs || timerSecs*1000;
+    stopLocalTick(); lastSyncedSeconds=-1; startLocalTick();
     document.getElementById('t-play').style.display  = 'none';
     document.getElementById('t-pause').style.display = 'flex';
   } else {
-    // Paused/stopped — remaining is stored directly (not computed)
-    const leftMs = t.remainingMs !== undefined ? t.remainingMs : (t.pausedLeft !== undefined ? t.pausedLeft : timerSecs * 1000);
-    timerLeft = Math.floor(leftMs / 1000);
-    timerOn   = false;
+    const leftMs = (t.remainingMs !== undefined) ? t.remainingMs
+                 : (t.pausedLeft  !== undefined) ? t.pausedLeft
+                 : timerSecs*1000;
+    timerLeft       = Math.floor(leftMs/1000);
+    timerOn         = false;
     timerStartedAt  = null;
-    timerDurationMs = t.durationMs || timerSecs * 1000;
+    timerDurationMs = t.durationMs || timerSecs*1000;
     timerPausedLeft = leftMs;
-    lastSyncedSeconds = -1;
-    stopLocalTick();
+    stopLocalTick(); lastSyncedSeconds=-1;
     document.getElementById('t-play').style.display  = 'flex';
     document.getElementById('t-pause').style.display = 'none';
     renderTimerDisplay(timerLeft);
@@ -507,286 +602,151 @@ function syncTimerFromRemote(t) {
 function startLocalTick() {
   stopLocalTick();
   function tick() {
-    const elapsed = timerStartedAt ? serverNow() - timerStartedAt : 0;
-    const leftMs  = Math.max(0, (timerDurationMs || timerSecs * 1000) - elapsed);
-    const secs    = Math.floor(leftMs / 1000);
-
+    const elapsed = timerStartedAt ? serverNow()-timerStartedAt : 0;
+    const leftMs  = Math.max(0, (timerDurationMs||timerSecs*1000)-elapsed);
+    const secs    = Math.floor(leftMs/1000);
     if (secs !== lastSyncedSeconds) {
       lastSyncedSeconds = secs;
       timerLeft = secs;
       renderTimerDisplay(secs);
-
-      if (secs <= 3 && secs > 0) {
-        playBeep(secs === 1 ? 1200 : secs === 2 ? 1000 : 800);
-        if (!cdBusy) showCountdown(secs);
-      }
-      if (secs <= 0) {
-        stopLocalTick();
-        timerOn = false;
+      if (secs<=3 && secs>0) { playBeep(secs===1?1200:secs===2?1000:800); if (!cdBusy) showCountdown(secs); }
+      if (secs<=0) {
+        stopLocalTick(); timerOn=false;
         document.getElementById('t-play').style.display  = 'flex';
         document.getElementById('t-pause').style.display = 'none';
-        playAlarm();
-        showCountdown(0);
-        return;
+        playAlarm(); showCountdown(0); return;
       }
     }
   }
-  // 100ms interval: detects second boundary within ≤100ms — imperceptible to users,
-  // uses ~1/6th the CPU of requestAnimationFrame (60fps) for a once-per-second update
   timerInt = setInterval(tick, 100);
 }
-
-function stopLocalTick() {
-  if (timerInt) { clearInterval(timerInt); timerInt = null; }
-}
+function stopLocalTick() { if (timerInt) { clearInterval(timerInt); timerInt=null; } }
 
 function renderTimerDisplay(secs) {
-  const m  = String(Math.floor(secs / 60)).padStart(2, '0');
-  const s  = String(secs % 60).padStart(2, '0');
   const el = document.getElementById('timer-disp');
-  el.textContent = m + ':' + s;
-  el.className = 'timer-display';
-  if (secs <= 10 && secs > 3) el.classList.add('warn');
-  if (secs <= 3 && secs > 0)  el.classList.add('danger');
+  el.textContent = String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0');
+  el.className   = 'timer-display';
+  if (secs<=10 && secs>3) el.classList.add('warn');
+  if (secs<=3  && secs>0) el.classList.add('danger');
 }
 
 function pushTimerState(running, overrideRemainingMs) {
   const now = serverNow();
   if (running) {
-    const remainingMs = overrideRemainingMs !== undefined ? overrideRemainingMs
-                      : (timerPausedLeft !== null ? timerPausedLeft : timerDurationMs);
-    timerStartedAt  = now;
-    timerDurationMs = remainingMs;
-    timerPausedLeft = null;
-    pushRemote({ timer: {
-      secs: timerSecs, durationMs: remainingMs,
-      running: true, startedAt: now,
-      remainingMs: null, pausedAt: null
-    }});
+    const ms = overrideRemainingMs !== undefined ? overrideRemainingMs
+             : (timerPausedLeft !== null ? timerPausedLeft : timerDurationMs);
+    timerStartedAt=now; timerDurationMs=ms; timerPausedLeft=null;
+    pushRemote({timer:{secs:timerSecs,durationMs:ms,running:true,startedAt:now,remainingMs:null,pausedAt:null}});
   } else {
-    // Compute remaining entirely from server-anchored values.
-    // timerStartedAt and timerDurationMs were set when we received the last
-    // running=true Firebase update, so they are always in sync with the server.
-    const elapsed   = timerStartedAt ? (serverNow() - timerStartedAt) : 0;
-    const remaining = Math.max(0, timerDurationMs - elapsed);
-    timerPausedLeft = remaining;
-    timerStartedAt  = null;
-    // Do NOT read timerDurationMs from local state for the stored field —
-    // write the value we just computed so all devices read the same number.
-    pushRemote({ timer: {
-      secs: timerSecs, durationMs: timerDurationMs,
-      running: false, startedAt: null,
-      remainingMs: remaining, pausedAt: now
-    }});
+    const elapsed   = timerStartedAt ? serverNow()-timerStartedAt : 0;
+    const remaining = Math.max(0, timerDurationMs-elapsed);
+    timerPausedLeft=remaining; timerStartedAt=null;
+    pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:remaining,pausedAt:now}});
   }
 }
 
 function setPreset(mins, el) {
-  document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
+  document.querySelectorAll('.t-pre').forEach(e=>e.classList.remove('on'));
   if (el) el.classList.add('on');
-  timerSecs       = mins * 60;
-  timerDurationMs = timerSecs * 1000;
-  timerLeft       = timerSecs;
-  timerPausedLeft = timerDurationMs;
-  stopLocalTick(); timerOn = false; lastSyncedSeconds = -1;
-  document.getElementById('t-play').style.display  = 'flex';
-  document.getElementById('t-pause').style.display = 'none';
+  timerSecs=mins*60; timerDurationMs=timerSecs*1000; timerLeft=timerSecs; timerPausedLeft=timerDurationMs;
+  stopLocalTick(); timerOn=false; lastSyncedSeconds=-1;
+  document.getElementById('t-play').style.display='flex';
+  document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
-  pushRemote({ timer: { secs: timerSecs, durationMs: timerDurationMs, running: false, startedAt: null, remainingMs: timerDurationMs, pausedAt: null } });
+  pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:timerDurationMs,pausedAt:null}});
 }
 window.setPreset = setPreset;
 
 function setCustomTimer() {
-  const v = parseInt(document.getElementById('t-custom-inp').value);
-  if (!v || v < 1) return;
-  document.querySelectorAll('.t-pre').forEach(e => e.classList.remove('on'));
-  timerSecs       = v * 60;
-  timerDurationMs = timerSecs * 1000;
-  timerLeft       = timerSecs;
-  timerPausedLeft = timerDurationMs;
-  stopLocalTick(); timerOn = false; lastSyncedSeconds = -1;
-  document.getElementById('t-play').style.display  = 'flex';
-  document.getElementById('t-pause').style.display = 'none';
+  const v=parseInt(document.getElementById('t-custom-inp').value);
+  if (!v||v<1) return;
+  document.querySelectorAll('.t-pre').forEach(e=>e.classList.remove('on'));
+  timerSecs=v*60; timerDurationMs=timerSecs*1000; timerLeft=timerSecs; timerPausedLeft=timerDurationMs;
+  stopLocalTick(); timerOn=false; lastSyncedSeconds=-1;
+  document.getElementById('t-play').style.display='flex';
+  document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
-  pushRemote({ timer: { secs: timerSecs, durationMs: timerDurationMs, running: false, startedAt: null, remainingMs: timerDurationMs, pausedAt: null } });
+  pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:timerDurationMs,pausedAt:null}});
 }
 window.setCustomTimer = setCustomTimer;
 
 function startTimer() {
   if (timerOn) return;
-  const remainingMs = timerPausedLeft !== null ? timerPausedLeft : timerDurationMs;
-  if (remainingMs <= 0) {
-    timerDurationMs = timerSecs * 1000;
-    timerPausedLeft = timerDurationMs;
-  }
-  timerOn = true;
-  document.getElementById('t-play').style.display  = 'none';
-  document.getElementById('t-pause').style.display = 'flex';
-  pushTimerState(true, timerPausedLeft !== null ? timerPausedLeft : timerDurationMs);
+  const ms = timerPausedLeft !== null ? timerPausedLeft : timerDurationMs;
+  if (ms<=0) { timerDurationMs=timerSecs*1000; timerPausedLeft=timerDurationMs; }
+  timerOn=true;
+  document.getElementById('t-play').style.display='none';
+  document.getElementById('t-pause').style.display='flex';
+  pushTimerState(true, timerPausedLeft!==null?timerPausedLeft:timerDurationMs);
   startLocalTick();
 }
 window.startTimer = startTimer;
 
 function pauseTimer() {
   if (!timerOn) return;
-  timerOn = false;
-  stopLocalTick();
-  document.getElementById('t-play').style.display  = 'flex';
-  document.getElementById('t-pause').style.display = 'none';
-  pushTimerState(false); // computes exact remaining from server timestamps
+  timerOn=false; stopLocalTick();
+  document.getElementById('t-play').style.display='flex';
+  document.getElementById('t-pause').style.display='none';
+  pushTimerState(false);
 }
 window.pauseTimer = pauseTimer;
 
 function resetTimer() {
   stopLocalTick();
-  timerOn         = false;
-  timerLeft       = timerSecs;
-  timerDurationMs = timerSecs * 1000;
-  timerPausedLeft = timerDurationMs;
-  timerStartedAt  = null;
-  lastSyncedSeconds = -1;
-  document.getElementById('t-play').style.display  = 'flex';
-  document.getElementById('t-pause').style.display = 'none';
+  timerOn=false; timerLeft=timerSecs; timerDurationMs=timerSecs*1000;
+  timerPausedLeft=timerDurationMs; timerStartedAt=null; lastSyncedSeconds=-1;
+  document.getElementById('t-play').style.display='flex';
+  document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
-  pushRemote({ timer: { secs: timerSecs, durationMs: timerDurationMs, running: false, startedAt: null, remainingMs: timerDurationMs, pausedAt: null } });
+  pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:timerDurationMs,pausedAt:null}});
 }
 window.resetTimer = resetTimer;
 
 function toggleTimer() {
-  timerHide = !timerHide;
-  const p = document.getElementById('timer-panel');
-  [...p.children].forEach(c => { if (!c.classList.contains('t-hide')) c.style.display = timerHide ? 'none' : ''; });
-  p.querySelector('.t-hide').textContent = timerHide ? 'Show Timer' : 'Hide Timer';
+  timerHide=!timerHide;
+  const p=document.getElementById('timer-panel');
+  [...p.children].forEach(c=>{ if (!c.classList.contains('t-hide')) c.style.display=timerHide?'none':''; });
+  p.querySelector('.t-hide').textContent=timerHide?'Show Timer':'Hide Timer';
   if (timerHide) pauseTimer();
 }
 window.toggleTimer = toggleTimer;
 
 function showCountdown(n) {
-  if (cdBusy && n !== 0) return; // don't stack non-finish countdowns
-  cdBusy = true;
-  const ov = document.getElementById('cdown');
-  const nm = document.getElementById('cdown-num');
-  nm.textContent = n === 0 ? '🏁' : n;
-  // Clone node to restart animation cleanly without stacking listeners
-  const fresh = nm.cloneNode(true);
-  nm.parentNode.replaceChild(fresh, nm);
-  fresh.style.animation = 'cPop .85s ease-out forwards';
+  if (cdBusy && n!==0) return;
+  cdBusy=true;
+  const ov=document.getElementById('cdown');
+  const nm=document.getElementById('cdown-num');
+  nm.textContent = n===0?'🏁':n;
+  const fresh=nm.cloneNode(true);
+  nm.parentNode.replaceChild(fresh,nm);
+  fresh.style.animation='cPop .85s ease-out forwards';
   ov.classList.add('show');
-  fresh.addEventListener('animationend', () => {
-    ov.classList.remove('show');
-    cdBusy = false;
-  }, { once: true });
-  // Safety fallback in case animationend doesn't fire (hidden tab, etc.)
-  setTimeout(() => { ov.classList.remove('show'); cdBusy = false; }, 950);
+  fresh.addEventListener('animationend',()=>{ov.classList.remove('show');cdBusy=false;},{once:true});
+  setTimeout(()=>{ov.classList.remove('show');cdBusy=false;},950);
 }
 
-// ══ FIREBASE HELPERS ══════════════════════════════════
-// CLIENT_ID and localWriteSeq are declared at the top of the script
-// so they are available when the onValue listener first fires.
-
-function pushRemote(partial) {
-  localWriteSeq++;
-  partial._cid = CLIENT_ID;
-  partial._seq = localWriteSeq;
-  update(ref(db, ROOT), partial);
-  saveLocal(); // persist to localStorage for offline recovery
-}
-function teamsToObj(teams) {
-  const obj = {};
-  teams.forEach(t => { obj[t.id] = t; });
-  return obj;
-}
-function pushTeams() {
-  const obj = teamsToObj(localTeams);
-  pushRemote({ teams: localTeams, teams_obj: obj });
-}
-function pushAll() {
-  const obj = teamsToObj(localTeams);
-  pushRemote({
-    title:     document.getElementById('game-title').value,
-    round:     roundNum,
-    teams:     localTeams,
-    teams_obj: obj,
-    history:   gameHistory
-  });
-}
-
-// ══ LOCAL PERSISTENCE ════════════════════════════════
-// Saves to localStorage on every push so a refresh-while-offline
-// restores the last known state instead of showing an empty board.
-const LS_KEY = 'scoreboard_local_v1';
-
-function saveLocal() {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify({
-      title:     document.getElementById('game-title').value,
-      round:     roundNum,
-      teams:     localTeams,
-      history:   gameHistory,
-      savedAt:   Date.now()
-    }));
-  } catch(e) {}
-}
-
-function loadLocal() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return false;
-    const d = JSON.parse(raw);
-    // Only restore if saved within last 24 hours
-    if (!d || Date.now() - d.savedAt > 86400000) return false;
-    if (d.title) {
-      const el = document.getElementById('game-title');
-      el.value = d.title; autoSize(el);
-    }
-    if (d.round) {
-      roundNum = d.round;
-      document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
-    }
-    if (d.teams && d.teams.length) {
-      localTeams = d.teams;
-      teamCtr    = Math.max(teamCtr, ...localTeams.map(t => t.id || 0));
-      renderTeams();
-    }
-    if (d.history) {
-      gameHistory = d.history;
-      renderHistory();
-    }
-    updateStats();
-    return true;
-  } catch(e) { return false; }
-}
-let titleDB;
-function syncTitle() {
-  clearTimeout(titleDB);
-  titleDB = setTimeout(() => pushRemote({ title: document.getElementById('game-title').value }), 600);
-}
-window.syncTitle = syncTitle;
-
-// ══ RENDER TEAMS ══════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// RENDER TEAMS  (DOM diffing — preserves focus, never wipes grid)
+// ══════════════════════════════════════════════════════════════════
 function renderTeams() {
   const grid = document.getElementById('teams-grid');
-  const maxScore = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
+  const maxScore = localTeams.length ? Math.max(...localTeams.map(t=>t.score)) : 0;
 
-  // Remove boxes for teams that no longer exist
+  // Remove stale boxes
   grid.querySelectorAll('.team-box').forEach(box => {
-    if (!localTeams.find(t => String(t.id) === box.dataset.id)) box.remove();
+    if (!localTeams.find(t => String(t.id)===box.dataset.id)) box.remove();
   });
 
   localTeams.forEach((team, idx) => {
-    const col  = team.color || COLORS[idx % COLORS.length];
-    const step = team.step || 1;
-    const lead = team.score === maxScore
-              && localTeams.filter(t => t.score === maxScore).length === 1
-              && maxScore > 0;
-
-    let box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
+    const col  = team.color || COLORS[idx%COLORS.length];
+    const step = team.step  || 1;
+    const lead = team.score===maxScore && localTeams.filter(t=>t.score===maxScore).length===1 && maxScore>0;
+    let box    = grid.querySelector(`.team-box[data-id="${team.id}"]`);
 
     if (!box) {
-      // New team — create the full node
       box = document.createElement('div');
       box.dataset.id = team.id;
-      box.innerHTML = `
+      box.innerHTML  = `
         <div class="leader-crown">&#127942; Leading</div>
         <div class="color-strip" style="background:${col}"></div>
         <button class="rm-team" data-id="${team.id}">&#215;</button>
@@ -794,37 +754,35 @@ function renderTeams() {
         <div class="ctrls">
           <button class="bscore bminus" data-id="${team.id}" data-dir="-1">&#8722;</button>
           <div class="score-num" id="sn-${team.id}">${team.score}</div>
-          <button class="bscore bplus" data-id="${team.id}" data-dir="1">+</button>
+          <button class="bscore bplus"  data-id="${team.id}" data-dir="1">+</button>
         </div>
         <div class="steps">
           ${[1,2,5,10].map(n=>`<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}">&plusmn;${n}</button>`).join('')}
         </div>`;
       grid.appendChild(box);
     } else {
-      // Existing team — patch only what changed, never touch the focused input
-      const nameEl = box.querySelector('.team-name');
-      if (document.activeElement !== nameEl && nameEl.value !== team.name) nameEl.value = team.name;
-      const scoreEl = box.querySelector('.score-num');
-      if (scoreEl && scoreEl.textContent != team.score) scoreEl.textContent = team.score;
-      // Sync step buttons
-      box.querySelectorAll('.step').forEach(b => b.classList.toggle('on', parseInt(b.dataset.step) === step));
+      // Patch without touching the active input
+      const ni = box.querySelector('.team-name');
+      if (document.activeElement !== ni && ni.value !== team.name) ni.value = team.name;
+      const si = box.querySelector('.score-num');
+      if (si && si.textContent != team.score) si.textContent = team.score;
+      box.querySelectorAll('.step').forEach(b => b.classList.toggle('on', parseInt(b.dataset.step)===step));
     }
 
-    // Always sync class and color (safe — doesn't affect focus)
-    box.className = 'team-box' + (lead ? ' leader' : '');
+    box.className = 'team-box'+(lead?' leader':'');
     const strip = box.querySelector('.color-strip');
     if (strip) strip.style.background = col;
   });
 
-  // Ensure order matches localTeams (drag-free reorder)
+  // Enforce order
   localTeams.forEach((team, idx) => {
     const box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
-    if (box && grid.children[idx] !== box) grid.insertBefore(box, grid.children[idx] || null);
+    if (box && grid.children[idx]!==box) grid.insertBefore(box, grid.children[idx]||null);
   });
 
-  // Attach delegated event handlers once via a flag
-  if (!grid._handlersAttached) {
-    grid._handlersAttached = true;
+  // Attach handlers once
+  if (!grid._listenersAttached) {
+    grid._listenersAttached = true;
     grid.addEventListener('click', e => {
       const rm = e.target.closest('.rm-team');
       const bs = e.target.closest('.bscore');
@@ -842,53 +800,88 @@ function renderTeams() {
   rebuildDomCache();
 }
 
+// patchScoresDOM: updates only score elements and leader highlights.
+// Called when only scores changed — zero structural DOM work.
+function patchScoresDOM() {
+  const max = localTeams.length ? Math.max(...localTeams.map(t=>t.score)) : 0;
+  localTeams.forEach(t => {
+    const el  = domCache.scoreEls[t.id]  || document.getElementById('sn-'+t.id);
+    const box = domCache.teamBoxes[t.id] || document.querySelector(`.team-box[data-id="${t.id}"]`);
+    if (el  && el.textContent != t.score) el.textContent = t.score;
+    if (box) {
+      const lead = t.score===max && localTeams.filter(x=>x.score===max).length===1 && max>0;
+      box.classList.toggle('leader', lead);
+    }
+  });
+}
+
+// ── DOM Cache (rebuilt after renderTeams) ─────────────────────────
+const domCache = {scoreEls:{}, teamBoxes:{}};
+function rebuildDomCache() {
+  domCache.scoreEls={}; domCache.teamBoxes={};
+  localTeams.forEach(t => {
+    domCache.scoreEls[t.id]  = document.getElementById('sn-'+t.id);
+    domCache.teamBoxes[t.id] = document.querySelector(`.team-box[data-id="${t.id}"]`);
+  });
+}
+
+let leaderRafPending = false;
+function renderLeaders() {
+  if (leaderRafPending) return;
+  leaderRafPending=true;
+  requestAnimationFrame(()=>{
+    leaderRafPending=false; patchScoresDOM();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TEAM ACTIONS
+// ══════════════════════════════════════════════════════════════════
 function getStep(teamId) {
-  const t = localTeams.find(t => t.id === teamId);
-  if (t && t.step) return t.step; // use persisted value first
+  const t = localTeams.find(t=>t.id===teamId);
+  if (t && t.step) return t.step;
   const box = domCache.teamBoxes[teamId] || document.querySelector(`.team-box[data-id="${teamId}"]`);
   const s   = box && box.querySelector('.step.on');
   return s ? parseInt(s.dataset.step) : 1;
 }
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
 
-// ══ TEAM ACTIONS ══════════════════════════════════════
 function addTeamUI() {
   const id  = ++teamCtr;
   const col = COLORS[localTeams.length % COLORS.length];
-  localTeams.push({ id, name: 'Team ' + id, score: 0, color: col });
+  localTeams.push({id, name:'Team '+id, score:0, color:col});
   renderTeams(); pushTeams(); updateStats();
 }
 window.addTeamUI = addTeamUI;
 
 function removeTeam(id) {
-  if (localTeams.length <= 1) return;
-  localTeams = localTeams.filter(t => t.id !== id);
+  if (localTeams.length<=1) return;
+  localTeams = localTeams.filter(t=>t.id!==id);
   renderTeams(); pushTeams(); updateStats();
 }
 
 function updateTeamName(id, val) {
-  const t = localTeams.find(t => t.id === id);
-  if (t) { t.name = val; pushTeams(); }
+  const t = localTeams.find(t=>t.id===id);
+  if (t) { t.name=val; pushTeams(); }
 }
 
 function changeScore(id, dir) {
   const step = getStep(id);
-  const t    = localTeams.find(t => t.id === id);
+  const t    = localTeams.find(t=>t.id===id);
   if (!t) return;
 
-  // Optimistic local update for instant UI feedback
-  t.score = Math.max(0, t.score + dir * step);
-  const el = domCache.scoreEls[id] || document.getElementById('sn-' + id);
-  if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent = t.score; }
-  playDing(dir > 0);
+  // Optimistic local update — instant feedback
+  t.score = Math.max(0, t.score + dir*step);
+  const el = domCache.scoreEls[id] || document.getElementById('sn-'+id);
+  if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent=t.score; }
+  playDing(dir>0);
   renderLeaders(); updateStats();
 
-  // Atomic score update keyed by team ID (not array index) — immune to concurrent add/delete
-  runTransaction(ref(db, ROOT + '/teams_obj/' + id + '/score'), current => {
-    const base = (current === null ? t.score : current); // null = first write for this team
-    return Math.max(0, base + dir * step);
+  // Atomic increment on /scores/ID (string key).
+  // This path has its OWN onValue listener — no echo-skip issues.
+  // All devices (including the writer) receive the committed value via the scores listener.
+  runTransaction(ref(db, ROOT+'/scores/'+String(id)), current => {
+    const base = (current===null) ? t.score : current;
+    return Math.max(0, base + dir*step);
   }).then(result => {
     if (result.committed && result.snapshot.exists()) {
       t.score = result.snapshot.val();
@@ -898,73 +891,40 @@ function changeScore(id, dir) {
   }).catch(() => { pushTeamsDebounced(); });
 }
 
-let leaderRafPending = false;
-function renderLeaders() {
-  if (leaderRafPending) return;
-  leaderRafPending = true;
-  requestAnimationFrame(() => {
-    leaderRafPending = false;
-    const max = localTeams.length ? Math.max(...localTeams.map(t => t.score)) : 0;
-    localTeams.forEach(t => {
-      const box = domCache.teamBoxes[t.id] || document.querySelector(`.team-box[data-id="${t.id}"]`);
-      if (!box) return;
-      const lead = t.score === max && localTeams.filter(x => x.score === max).length === 1 && max > 0;
-      box.classList.toggle('leader', lead);
-    });
-  });
-}
-
-// ══ DOM ELEMENT CACHE ═════════════════════════════════
-// Rebuilt whenever renderTeams() runs — eliminates repeated getElementById/querySelectorAll
-const domCache = { scoreEls: {}, teamBoxes: {} };
-
-function rebuildDomCache() {
-  domCache.scoreEls = {};
-  domCache.teamBoxes = {};
-  localTeams.forEach(t => {
-    domCache.scoreEls[t.id]  = document.getElementById('sn-' + t.id);
-    domCache.teamBoxes[t.id] = document.querySelector(`.team-box[data-id="${t.id}"]`);
-  });
-}
-let teamPushTimer = null;
-function pushTeamsDebounced() {
-  clearTimeout(teamPushTimer);
-  teamPushTimer = setTimeout(() => pushTeams(), 120);
-}
-
 function setStep(btn, teamId, n) {
   const box = document.querySelector(`.team-box[data-id="${teamId}"]`);
   if (!box) return;
-  box.querySelectorAll('.step').forEach(b => b.classList.remove('on'));
+  box.querySelectorAll('.step').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
-  const t = localTeams.find(t => t.id === teamId);
-  if (t) { t.step = n; pushTeamsDebounced(); }
+  const t = localTeams.find(t=>t.id===teamId);
+  if (t) { t.step=n; pushTeamsDebounced(); }
 }
 
 function resetAll() {
   if (!confirm('Reset all scores to 0?')) return;
-  localTeams.forEach(t => t.score = 0);
+  localTeams.forEach(t=>t.score=0);
   roundNum++;
-  document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+  document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
   renderTeams(); pushAll(); updateStats();
-  showToast('Round ' + roundNum + ' begins! 🎮');
+  showToast('Round '+roundNum+' begins! 🎮');
 }
 window.resetAll = resetAll;
 
-// ══ SAVE GAME ═════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// SAVE / HISTORY
+// ══════════════════════════════════════════════════════════════════
 function saveGame() {
   const entry = {
     id:    Date.now(),
     game:  document.getElementById('game-title').value || 'Score Board',
     date:  new Date().toLocaleString(),
     round: roundNum,
-    teams: localTeams.map(t => ({...t}))
+    teams: localTeams.map(t=>({...t}))
   };
-  // Atomic prepend — safe when multiple devices save simultaneously
-  runTransaction(ref(db, ROOT + '/history'), current => {
-    let h = current ? (Array.isArray(current) ? current : Object.values(current)) : [];
+  runTransaction(ref(db, ROOT+'/history'), current => {
+    let h = current ? (Array.isArray(current)?current:Object.values(current)) : [];
     h.unshift(entry);
-    if (h.length > 60) h = h.slice(0, 60);
+    if (h.length>60) h=h.slice(0,60);
     return h;
   }).then(result => {
     if (result.committed) {
@@ -976,18 +936,17 @@ function saveGame() {
 }
 window.saveGame = saveGame;
 
-// ══ HISTORY ═══════════════════════════════════════════
 function renderHistory() {
   const el = document.getElementById('hist-list');
   if (!gameHistory.length) {
-    el.innerHTML = '<div class="empty">No saved games yet — press Save Game after each round!</div>';
+    el.innerHTML='<div class="empty">No saved games yet — press Save Game after each round!</div>';
     return;
   }
-  el.innerHTML = gameHistory.map((e, i) => {
-    const max   = Math.max(...e.teams.map(t => t.score));
+  el.innerHTML = gameHistory.map((e,i) => {
+    const max   = Math.max(...e.teams.map(t=>t.score));
     const chips = e.teams.map(t => {
-      const w = t.score === max && e.teams.filter(x => x.score === max).length === 1;
-      return `<span class="chip${w ? ' win' : ''}" style="${w ? '' : 'border-left:3px solid ' + t.color}">${esc(t.name)}: ${t.score}</span>`;
+      const w = t.score===max && e.teams.filter(x=>x.score===max).length===1;
+      return `<span class="chip${w?' win':''}" style="${w?'':'border-left:3px solid '+t.color}">${esc(t.name)}: ${t.score}</span>`;
     }).join('');
     return `<div class="hist-card">
       <div class="hist-date">${e.date}</div>
@@ -1001,8 +960,8 @@ function renderHistory() {
   }).join('');
 
   el.onclick = e => {
-    const r = e.target.closest('.hist-restore');
-    const d = e.target.closest('.hist-del');
+    const r=e.target.closest('.hist-restore');
+    const d=e.target.closest('.hist-del');
     if (r) restoreGame(parseInt(r.dataset.idx));
     if (d) delHistory(parseInt(d.dataset.idx));
   };
@@ -1010,72 +969,70 @@ function renderHistory() {
 
 function restoreGame(idx) {
   const e = gameHistory[idx];
-  if (!confirm('Restore "' + e.game + '" Round ' + e.round + '?')) return;
+  if (!confirm('Restore "'+e.game+'" Round '+e.round+'?')) return;
   document.getElementById('game-title').value = e.game;
   autoSize(document.getElementById('game-title'));
-  localTeams = e.teams.map(t => ({...t}));
-  teamCtr    = Math.max(teamCtr, ...localTeams.map(t => t.id || 0));
+  localTeams = e.teams.map(t=>({...t}));
+  teamCtr    = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
   roundNum   = e.round;
-  document.getElementById('round-disp').textContent = '🎮 Round ' + roundNum;
+  document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
   renderTeams(); pushAll(); updateStats();
   showToast('Restored! ↩');
 }
 
 function delHistory(idx) {
-  // Atomic delete by entry ID (not array index which can shift between devices)
   const entryId = gameHistory[idx]?.id;
   if (!entryId) return;
-  runTransaction(ref(db, ROOT + '/history'), current => {
-    let h = current ? (Array.isArray(current) ? current : Object.values(current)) : [];
-    h = h.filter(e => e.id !== entryId);
+  runTransaction(ref(db, ROOT+'/history'), current => {
+    let h = current ? (Array.isArray(current)?current:Object.values(current)) : [];
+    h = h.filter(e=>e.id!==entryId);
     return h;
   }).then(result => {
     if (result.committed) {
-      gameHistory = Array.isArray(result.snapshot.val()) ? result.snapshot.val() : (result.snapshot.val() ? Object.values(result.snapshot.val()) : []);
+      const v = result.snapshot.val();
+      gameHistory = v ? (Array.isArray(v)?v:Object.values(v)) : [];
       renderHistory(); updateStats();
     }
   });
 }
 
-// ══ STATS ═════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// STATS
+// ══════════════════════════════════════════════════════════════════
 function updateStats() {
-  const total  = localTeams.reduce((a, t) => a + t.score, 0);
-  const sorted = [...localTeams].sort((a, b) => b.score - a.score);
+  const total  = localTeams.reduce((a,t)=>a+t.score,0);
+  const sorted = [...localTeams].sort((a,b)=>b.score-a.score);
   const leader = sorted[0];
-  const gap    = sorted.length > 1 ? sorted[0].score - sorted[1].score : 0;
-  document.getElementById('stats').innerHTML = `
+  const gap    = sorted.length>1 ? sorted[0].score-sorted[1].score : 0;
+  document.getElementById('stats').innerHTML=`
     <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${total}</div></div>
-    <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:1rem;padding-top:6px">${leader ? esc(leader.name) : '—'}</div></div>
+    <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:1rem;padding-top:6px">${leader?esc(leader.name):'—'}</div></div>
     <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${gap}</div></div>
     <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${gameHistory.length}</div></div>
     <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
   `;
 }
 
-// ══ QR ════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// QR / SHARE
+// ══════════════════════════════════════════════════════════════════
 function getShareUrl() {
-  // file:// protocol cannot be shared — detect and warn
-  if (location.protocol === 'file:') return null;
-  // Embed roomId in hash so the same hosted URL can host multiple rooms
-  const base = location.origin + location.pathname;
-  return base + (location.hash || '#' + ROOM_ID);
+  if (location.protocol==='file:') return null;
+  return location.origin + location.pathname + '#' + ROOM_ID;
 }
 
 function openQR() {
   const url = getShareUrl();
-  if (!url) {
-    showToast('⚠️ Host this file on a web server to share via QR');
-    return;
-  }
+  if (!url) { showToast('⚠️ Host this file on a web server to share via QR'); return; }
   document.getElementById('qr-url-text').textContent = url;
   if (!qrGenerated) {
-    document.getElementById('qr-box').innerHTML = '';
-    new QRCode(document.getElementById('qr-box'), {
-      text: url, width: 220, height: 220,
-      colorDark: '#f5c842', colorLight: '#10131a',
-      correctLevel: QRCode.CorrectLevel.H
+    document.getElementById('qr-box').innerHTML='';
+    new QRCode(document.getElementById('qr-box'),{
+      text:url, width:220, height:220,
+      colorDark:'#f5c842', colorLight:'#10131a',
+      correctLevel:QRCode.CorrectLevel.H
     });
-    qrGenerated = true;
+    qrGenerated=true;
   }
   document.getElementById('qr-modal').classList.add('show');
 }
@@ -1083,28 +1040,42 @@ function closeQR() { document.getElementById('qr-modal').classList.remove('show'
 window.openQR  = openQR;
 window.closeQR = closeQR;
 document.getElementById('qr-modal').addEventListener('click', e => {
-  if (e.target === document.getElementById('qr-modal')) closeQR();
+  if (e.target===document.getElementById('qr-modal')) closeQR();
 });
 
-// ══ CLOCK ═════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// TITLE SYNC
+// ══════════════════════════════════════════════════════════════════
+let titleDB;
+function syncTitle() {
+  clearTimeout(titleDB);
+  titleDB = setTimeout(()=>pushRemote({title:document.getElementById('game-title').value}),600);
+}
+window.syncTitle = syncTitle;
+
+// ══════════════════════════════════════════════════════════════════
+// CLOCK / UTILS
+// ══════════════════════════════════════════════════════════════════
 function updateClock() {
   const now = new Date();
   document.getElementById('date-disp').textContent =
-    now.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+    now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
   document.getElementById('time-disp').textContent =
-    now.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+    now.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
 }
 
-// ══ UTILS ═════════════════════════════════════════════
-function autoSize(el) { el.style.width = '10px'; el.style.width = (el.scrollWidth + 6) + 'px'; }
+function autoSize(el) { el.style.width='10px'; el.style.width=(el.scrollWidth+6)+'px'; }
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2600);
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2600);
 }
 function showError(msg) {
-  const b = document.getElementById('err-banner');
-  b.textContent = '⚠️ ' + msg; b.classList.add('show');
+  const b=document.getElementById('err-banner');
+  b.textContent='⚠️ '+msg; b.classList.add('show');
 }
 window.autoSize = autoSize;
 
