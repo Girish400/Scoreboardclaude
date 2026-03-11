@@ -516,10 +516,8 @@ const ROOM_ID = getExistingRoomId(); // null on fresh visit, string if arrived v
 const ROOT    = ROOM_ID ? 'rooms/' + ROOM_ID : null;
 
 // ── Per-session identity ──────────────────────────────────────
-// CLIENT_ID suppresses echo; PLAYER_ID is the durable identity stored
-// in localStorage so the same person rejoins after a page refresh.
+// CLIENT_ID: unique per-session identifier
 const CLIENT_ID  = Math.random().toString(36).slice(2);
-let   lastPushedSeq = 0;
 
 const LS_KEY        = ROOM_ID ? 'sb_' + ROOM_ID : null;
 const PLAYER_ID_KEY = ROOM_ID ? 'sb_pid_' + ROOM_ID : null;
@@ -975,28 +973,13 @@ function setupFirebase(overrideRoot) {
   const _codeDisp = document.getElementById('lobby-room-code');
   if (_codeDisp) _codeDisp.textContent = ACTIVE_ROOT.replace('rooms/','').toUpperCase();
 
-  // Track whether we have rendered at least once for this listener.
-  // The FIRST snapshot must ALWAYS render (it's the authoritative state from Firebase
-  // after room creation or page load). Only suppress subsequent echo-back snapshots.
-  let firstSnapshotReceived = false;
-
   onValue(ref(db, ACTIVE_ROOT), snap=>{
     const data = snap.val();
     if (!data) return;
 
-    // Echo suppression: skip ONLY if this is NOT the first snapshot,
-    // AND the metadata confirms this update originated from us,
-    // AND the game state has NOT changed (never suppress a state transition).
-    // FIX: "Start Game" / "End Game" pushes were being suppressed because
-    // lastPushedSeq matched — leaving the host stuck on the wrong view.
-    const incomingState = data.state || 'lobby';
-    if (firstSnapshotReceived &&
-        data.meta && data.meta._cid === CLIENT_ID &&
-        data.meta._seq === lastPushedSeq &&
-        incomingState === gameState) {
-      return;
-    }
-    firstSnapshotReceived = true;
+    // No echo suppression — always apply remote state.
+    // Firebase RTDB is the single source of truth; local state is updated
+    // optimistically and the onValue callback reconciles it.
     applyRemoteState(data);
   }, err=>showError('Firebase error: '+err.message));
 }
@@ -1088,14 +1071,14 @@ function renderView(stateChanged) {
 function show(id){
   const el=document.getElementById(id);
   if(!el) return;
+  el.style.display='block';
   el.classList.add('view-visible');
-  el.style.display='';  // clear any inline override
 }
 function hide(id){
   const el=document.getElementById(id);
   if(!el) return;
-  el.classList.remove('view-visible');
   el.style.display='none';
+  el.classList.remove('view-visible');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1547,17 +1530,21 @@ function advanceTurn() {
 // HOST CONTROLS
 // ═══════════════════════════════════════════════════════════════
 function hostStartGame() {
-  if (MY_PLAYER_ID !== hostId) return;
+  if (MY_PLAYER_ID !== hostId) { showToast('Only the host can start the game', true); return; }
   const pids = Object.keys(players).sort((a,b)=>players[a].joinedAt-players[b].joinedAt);
-  if (pids.length < 2) { showToast('Need at least 2 players to start',true); return; }
-  const order = [...pids]; // join order = turn order
-  pushRemote({
-    state: 'active',
-    turnOrder: order,
-    turnIndex: 0,
-    currentTurn: order[0],
-    lastScore: null
-  });
+  if (pids.length < 2) { showToast('Need at least 2 players to start', true); return; }
+  const order = [...pids];
+  // Update local state immediately — do NOT wait for Firebase echo
+  const prevState = gameState;
+  gameState    = 'active';
+  turnOrder    = order;
+  turnIndex    = 0;
+  currentTurn  = order[0];
+  lastScore    = null;
+  canUndo      = false;
+  renderView(prevState !== gameState);
+  // Persist to Firebase so other clients update
+  pushRemote({ state:'active', turnOrder:order, turnIndex:0, currentTurn:order[0], lastScore:null });
   showToast('Game started! ▶');
 }
 window.hostStartGame = hostStartGame;
@@ -1566,6 +1553,10 @@ function hostEndGame() {
   if (MY_PLAYER_ID !== hostId) return;
   if (!confirm('End the game and show final scores?')) return;
   stopLocalTick();
+  const prevState = gameState;
+  gameState   = 'finished';
+  currentTurn = null;
+  renderView(prevState !== gameState);
   pushRemote({ state:'finished', currentTurn:null });
   playCelebrate();
 }
@@ -1581,6 +1572,15 @@ function hostNewGame() {
   });
   stopLocalTick();
   roundNum++;
+  // Update local state immediately
+  const _prevState = gameState;
+  gameState   = 'lobby';
+  currentTurn = null;
+  turnIndex   = 0;
+  turnOrder   = [];
+  players     = resetPlayers;
+  localTeams  = playersToTeams(resetPlayers);
+  renderView(_prevState !== gameState);
   pushRemote({
     state: 'lobby', currentTurn:null, turnIndex:0, turnOrder:[],
     round: roundNum, players: resetPlayers, lastScore:null,
@@ -1825,12 +1825,7 @@ function updateStats() {
 // PUSH HELPERS
 // ═══════════════════════════════════════════════════════════════
 function pushRemote(partial) {
-  lastPushedSeq++;
-  const seq = lastPushedSeq;
   const AR = window._ACTIVE_ROOT || ROOT;
-  // B-5 FIX: write echo metadata to a separate /meta path so it never
-  // pollutes the canonical game state that all clients read
-  update(ref(db, AR+'/meta'), { _cid: CLIENT_ID, _seq: seq });
   update(ref(db, AR), partial);
   saveLocal();
 }
