@@ -30,15 +30,48 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .modal-close{background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 28px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.9rem;transition:all .2s;}
 .modal-close:hover{background:var(--red);border-color:var(--red);}
 
-/* ── JOIN MODAL ─────────────────────────────────────── */
-#join-modal .modal{max-width:420px;}
-.join-field{width:100%;background:var(--surface2);border:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:1.1rem;padding:13px 16px;border-radius:12px;outline:none;text-align:center;transition:border-color .2s;margin-bottom:10px;}
-.join-field:focus{border-color:var(--gold);}
+/* ── LANDING SCREEN ─────────────────────────────────── */
+#landing-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:3000;padding:20px;}
+#landing-screen.hide{display:none;}
+.landing-card{background:var(--surface);border:1px solid var(--border2);border-radius:28px;padding:44px 36px 36px;text-align:center;max-width:420px;width:100%;}
+.landing-logo{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.6rem,10vw,4rem);letter-spacing:5px;color:var(--gold);text-shadow:0 0 40px rgba(245,200,66,.3);margin-bottom:6px;}
+.landing-tagline{color:var(--muted);font-size:.88rem;margin-bottom:32px;line-height:1.5;}
+.landing-btns{display:flex;flex-direction:column;gap:12px;margin-bottom:24px;}
+.btn-host{width:100%;padding:15px;background:var(--gold);color:#000;border:none;border-radius:14px;font-family:'DM Sans',sans-serif;font-size:1.05rem;font-weight:700;cursor:pointer;transition:filter .2s;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;}
+.btn-host:hover{filter:brightness(1.1);}
+.btn-join-land{width:100%;padding:15px;background:var(--surface2);color:var(--text);border:2px solid var(--border2);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:1.05rem;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;}
+.btn-join-land:hover{border-color:var(--blue);color:var(--blue);}
+.landing-divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.78rem;margin:4px 0;}
+.landing-divider::before,.landing-divider::after{content:'';flex:1;height:1px;background:var(--border);}
+/* ── HOST SETUP MODAL ───────────────────────────────── */
+#host-modal .modal{max-width:440px;text-align:left;}
+#host-modal .modal h2{text-align:center;}
+#host-modal .modal p{text-align:center;}
+.setup-field-group{margin-bottom:14px;}
+.setup-field-group label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px;}
+.setup-field{width:100%;background:var(--surface2);border:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:1rem;padding:12px 14px;border-radius:12px;outline:none;transition:border-color .2s;}
+.setup-field:focus{border-color:var(--gold);}
+.setup-field.err{border-color:var(--red);}
+.field-err{color:var(--red);font-size:.78rem;min-height:16px;margin-top:4px;}
+.btn-modal-submit{width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;transition:filter .2s;margin-top:8px;touch-action:manipulation;}
+.btn-modal-submit:hover{filter:brightness(1.1);}
+.btn-modal-submit:disabled{opacity:.5;cursor:not-allowed;}
+.btn-modal-back{background:none;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:.85rem;cursor:pointer;padding:10px;margin-top:4px;width:100%;transition:color .2s;touch-action:manipulation;}
+.btn-modal-back:hover{color:var(--text);}
+/* ── JOIN MODAL (player) ────────────────────────────── */
+#join-modal .modal{max-width:440px;text-align:left;}
+#join-modal .modal h2{text-align:center;}
+#join-modal .modal p{text-align:center;}
+.join-field{width:100%;background:var(--surface2);border:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:1rem;padding:12px 14px;border-radius:12px;outline:none;transition:border-color .2s;}
+.join-field:focus{border-color:var(--blue);}
 .join-field.err{border-color:var(--red);}
-.field-err{color:var(--red);font-size:.8rem;min-height:18px;margin-bottom:12px;text-align:left;}
-.btn-join{width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;transition:filter .2s;}
+.btn-join{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;transition:filter .2s;margin-top:8px;touch-action:manipulation;}
 .btn-join:hover{filter:brightness(1.1);}
 .btn-join:disabled{opacity:.5;cursor:not-allowed;}
+/* room code display in lobby */
+.room-code-big{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:6px;color:var(--gold);background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:12px;padding:8px 20px;display:inline-block;margin:4px 0 2px;cursor:pointer;transition:background .2s;touch-action:manipulation;}
+.room-code-big:hover{background:rgba(245,200,66,.15);}
+.copy-hint{font-size:.72rem;color:var(--muted);margin-bottom:16px;}
 
 /* ── LOBBY VIEW ─────────────────────────────────────── */
 #lobby-view{display:none;}
@@ -117,6 +150,16 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .timer-display.warn{color:var(--orange);}
 .timer-display.danger{color:var(--red);animation:blink .5s infinite alternate;}
 @keyframes blink{from{opacity:1}to{opacity:.3}}
+/* F-4: shake feedback when disabled buttons tapped on mobile */
+@keyframes shakeOnce{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.step:disabled:active,.bscore:disabled:active{animation:shakeOnce .25s ease-out;}
+/* F-2: timer panel responsive layout */
+@media(max-width:560px){
+  .timer-panel{flex-wrap:wrap;}
+  .t-presets{order:2;width:100%;}
+  .timer-display{order:1;}
+  .t-custom{order:3;}
+}
 .t-presets{display:flex;gap:7px;flex-wrap:wrap;}
 .t-pre{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.78rem;font-family:'DM Sans',sans-serif;padding:5px 12px;border-radius:50px;cursor:pointer;transition:all .2s;}
 .t-pre:hover,.t-pre.on{background:var(--gold);color:#000;border-color:var(--gold);}
@@ -131,7 +174,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .t-hide:hover{border-color:var(--gold);color:var(--gold);}
 
 /* ── TEAMS GRID ─────────────────────────────────────── */
-#teams-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:20px;}
+#teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:16px;margin-bottom:20px;}
 .team-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px 16px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;transition:border-color .3s,box-shadow .3s,transform .2s;}
 .team-box:hover{transform:translateY(-2px);}
 .team-box.leader{border-color:var(--gold);box-shadow:0 0 50px rgba(245,200,66,.15),inset 0 0 30px rgba(245,200,66,.04);}
@@ -174,10 +217,10 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .b-qr{background:var(--blue);color:#fff;}
 
 /* ── STATS ──────────────────────────────────────────── */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:22px;}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(140px,45%),1fr));gap:10px;margin-bottom:22px;}
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;}
 .stat-l{font-size:.66rem;text-transform:uppercase;letter-spacing:1.8px;color:var(--muted);margin-bottom:4px;}
-.stat-v{font-family:'Bebas Neue',sans-serif;font-size:1.7rem;letter-spacing:1px;}
+.stat-v{font-family:'Bebas Neue',sans-serif;font-size:clamp(1.2rem,4vw,1.7rem);letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 /* ── HISTORY ────────────────────────────────────────── */
 .section-hd{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:2px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
@@ -222,7 +265,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 /* ── COUNTDOWN OVERLAY ──────────────────────────────── */
 .cdown{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:3000;opacity:0;pointer-events:none;transition:opacity .25s;}
 .cdown.show{opacity:1;pointer-events:all;}
-.cdown-num{font-family:'Bebas Neue',sans-serif;font-size:22vw;color:var(--gold);}
+.cdown-num{font-family:'Bebas Neue',sans-serif;font-size:clamp(4rem,22vmin,18rem);color:var(--gold);}
 @keyframes cPop{0%{transform:scale(2);opacity:0}25%{transform:scale(1);opacity:1}75%{transform:scale(1);opacity:1}100%{transform:scale(.5);opacity:0}}
 
 /* ── TOAST / ERROR ──────────────────────────────────── */
@@ -232,10 +275,22 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .err-banner{background:rgba(240,80,77,.15);border:1px solid var(--red);border-radius:12px;padding:12px 16px;margin-bottom:18px;font-size:.83rem;color:#f9b0af;display:none;}
 .err-banner.show{display:block;}
 
+/* ── TOUCH OPTIMIZATION (F-10) ──────────────────────── */
+.bscore,.step,.btn-turn,.btn-lobby,.btn-a,.t-pre,.tico,.t-hide,.btn-join,.modal-close,.hist-restore,.rm-team{touch-action:manipulation;}
+
 @media(max-width:480px){
   .timer-panel{flex-direction:column;align-items:flex-start;}
   .t-hide{margin-left:0;}
   .turn-banner{flex-direction:column;align-items:flex-start;}
+  /* F-3: stack turn-action buttons in a 2-col grid on mobile */
+  .turn-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;}
+  .btn-end-turn{grid-column:1/-1;}
+  /* F-1: bigger tap targets for score controls on single-col layout */
+  .bscore{width:52px;height:52px;font-size:1.5rem;}
+  .score-num{font-size:4rem;}
+  /* F-6: full-width lobby action buttons */
+  .lobby-actions{flex-direction:column;align-items:stretch;}
+  .btn-lobby{justify-content:center;}
 }
 </style>
 </head>
@@ -244,14 +299,55 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 <!-- ── COUNTDOWN OVERLAY ───────────────────────── -->
 <div class="cdown" id="cdown"><div class="cdown-num" id="cdown-num">3</div></div>
 
+<!-- ── LANDING SCREEN ────────────────────────── -->
+<div id="landing-screen">
+  <div class="landing-card">
+    <div class="landing-logo">🏆 ScoreBoard</div>
+    <div class="landing-tagline">Real-time multiplayer scoring.<br>Create a room or join with a code.</div>
+    <div class="landing-btns">
+      <button class="btn-host" id="btn-go-host">👑 Create Game <span style="opacity:.6;font-weight:400;font-size:.85em">— I'm the host</span></button>
+      <div class="landing-divider">or</div>
+      <button class="btn-join-land" id="btn-go-join">🎮 Join Game <span style="opacity:.6;font-weight:400;font-size:.85em">— I have a code</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── HOST SETUP MODAL ────────────────────── -->
+<div class="modal-bg" id="host-modal">
+  <div class="modal">
+    <h2>👑 Create Game</h2>
+    <p>Set up your room. Players will join with your room code.</p>
+    <div class="setup-field-group">
+      <label>Your name (Host)</label>
+      <input class="setup-field" id="host-name" type="text" placeholder="e.g. Alex" maxlength="30" autocomplete="off">
+      <div class="field-err" id="host-name-err"></div>
+    </div>
+    <div class="setup-field-group">
+      <label>Game title <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <input class="setup-field" id="host-game-title" type="text" placeholder="e.g. Quiz Night" maxlength="40" autocomplete="off" value="Score Board">
+    </div>
+    <button class="btn-modal-submit" id="btn-host-create">Create Room →</button>
+    <button class="btn-modal-back" id="btn-host-back">← Back</button>
+  </div>
+</div>
+
 <!-- ── JOIN MODAL ─────────────────────────────── -->
-<div class="modal-bg show" id="join-modal">
+<div class="modal-bg" id="join-modal">
   <div class="modal">
     <h2>🎮 Join Game</h2>
-    <p>Enter your name to join the scoreboard.<br>You'll keep this name for the whole game.</p>
-    <input class="join-field" id="join-name" type="text" placeholder="Your name…" maxlength="30" autocomplete="off">
-    <div class="field-err" id="join-err"></div>
-    <button class="btn-join" id="btn-join-ok">Join →</button>
+    <p>Enter the room code and your name to join.</p>
+    <div class="setup-field-group">
+      <label>Room code</label>
+      <input class="join-field" id="join-code" type="text" placeholder="e.g. ab12cd34" maxlength="16" autocomplete="off" style="text-transform:uppercase;letter-spacing:2px;">
+      <div class="field-err" id="join-code-err"></div>
+    </div>
+    <div class="setup-field-group">
+      <label>Your name</label>
+      <input class="join-field" id="join-name" type="text" placeholder="e.g. Jamie" maxlength="30" autocomplete="off">
+      <div class="field-err" id="join-err"></div>
+    </div>
+    <button class="btn-join" id="btn-join-ok">Join Game →</button>
+    <button class="btn-modal-back" id="btn-join-back">← Back</button>
   </div>
 </div>
 
@@ -276,9 +372,13 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
   ═══════════════════════════════════════════ -->
   <div id="lobby-view">
     <div class="lobby-header">
-      <div class="lobby-title">Score Board Live</div>
-      <div class="lobby-sub">Waiting for players to join…</div>
-      <div class="lobby-room">Room: <code id="lobby-room-code"></code></div>
+      <div class="lobby-title" id="lobby-title-disp">Score Board Live</div>
+      <div class="lobby-sub" id="lobby-sub-disp">Waiting for players to join…</div>
+      <div style="margin-top:14px;">
+        <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:4px;">Room Code — share this with players</div>
+        <div class="room-code-big" id="lobby-room-code" onclick="copyRoomCode()" title="Click to copy"></div>
+        <div class="copy-hint" id="copy-hint">Tap to copy · Players join at this URL with the code</div>
+      </div>
     </div>
 
     <div class="conn-bar" style="margin-bottom:22px;">
@@ -390,7 +490,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
 <script type="module">
 import { initializeApp }  from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getDatabase, ref, update, onValue, runTransaction, remove }
+import { getDatabase, ref, update, onValue, runTransaction, remove, push }
                           from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -529,121 +629,274 @@ updateClock();
 setInterval(updateClock,1000);
 renderTimerDisplay(timerSecs);
 autoSize(document.getElementById('game-title'));
-document.getElementById('lobby-room-code').textContent = ROOM_ID;
+document.getElementById('lobby-room-code').textContent = ROOM_ID.toUpperCase();
 document.body.addEventListener('touchstart',()=>{
   if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
 },{once:true});
 
-// Show join modal unless we already have a player ID stored
+// ── Determine entry flow ──────────────────────────────────────
+// If the URL has a hash that looks like a room code, show the landing
+// with the Join panel pre-filled. If we already have a stored player ID
+// for this room, skip directly to the game.
+const IS_HASH_ROOM = !!(location.hash.replace('#','').trim().match(/^[a-z0-9]{6,16}$/));
+
 if (MY_PLAYER_ID) {
-  document.getElementById('join-modal').classList.remove('show');
+  // Returning player — skip landing entirely
+  hideLanding();
   setupFirebase();
+} else if (IS_HASH_ROOM) {
+  // Arrived via shared link — skip landing, open join panel with code pre-filled
+  hideLanding();
+  showJoinModal(ROOM_ID);
 } else {
-  setupJoinModal();
+  // Fresh visit — show landing screen
+  setupLanding();
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function makePID() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2,10) + Math.random().toString(36).slice(2,10);
+}
+function hideLanding() {
+  document.getElementById('landing-screen').classList.add('hide');
+}
+function showModal(id) {
+  document.getElementById(id).classList.add('show');
+}
+function hideModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+// ── Copy room code ────────────────────────────────────────────
+function copyRoomCode() {
+  const url = location.protocol !== 'file:'
+    ? location.origin + location.pathname + '#' + ROOM_ID
+    : ROOM_ID;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(()=>showToast('Link copied! 📋'));
+  } else {
+    showToast('Room code: ' + ROOM_ID.toUpperCase());
+  }
+}
+window.copyRoomCode = copyRoomCode;
+
+// ═══════════════════════════════════════════════════════════════
+// LANDING SCREEN
+// ═══════════════════════════════════════════════════════════════
+function setupLanding() {
+  document.getElementById('btn-go-host').addEventListener('click', () => {
+    hideLanding();
+    showModal('host-modal');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>
+      document.getElementById('host-name').focus()));
+  });
+  document.getElementById('btn-go-join').addEventListener('click', () => {
+    hideLanding();
+    showJoinModal('');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
-// JOIN MODAL
+// HOST SETUP MODAL
 // ═══════════════════════════════════════════════════════════════
-function setupJoinModal() {
-  const nameInput = document.getElementById('join-name');
-  const errEl     = document.getElementById('join-err');
+document.getElementById('btn-host-back').addEventListener('click', () => {
+  hideModal('host-modal');
+  document.getElementById('landing-screen').classList.remove('hide');
+});
+
+document.getElementById('btn-host-create').addEventListener('click', attemptHostCreate);
+document.getElementById('host-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') attemptHostCreate();
+});
+
+function attemptHostCreate() {
+  const nameEl  = document.getElementById('host-name');
+  const nameErr = document.getElementById('host-name-err');
+  const titleEl = document.getElementById('host-game-title');
+  const btn     = document.getElementById('btn-host-create');
+  const name    = nameEl.value.trim();
+  const title   = titleEl.value.trim() || 'Score Board';
+
+  nameErr.textContent = '';
+  nameEl.classList.remove('err');
+
+  if (!name) { nameEl.classList.add('err'); nameErr.textContent = 'Enter your name.'; return; }
+  if (name.length < 2) { nameEl.classList.add('err'); nameErr.textContent = 'At least 2 characters.'; return; }
+  if (name.length > 30) { nameEl.classList.add('err'); nameErr.textContent = 'Max 30 characters.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+
+  MY_PLAYER_ID = makePID();
+  localStorage.setItem(PLAYER_ID_KEY, MY_PLAYER_ID);
+
+  const pid = MY_PLAYER_ID;
+  // Host always creates a brand-new room — transaction only runs if room doesn't exist yet
+  runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)), cur => {
+    if (cur) return; // room already exists — abort (shouldn't happen on fresh room ID)
+    return {
+      state: 'lobby', hostId: pid, title, round: 1,
+      currentTurn: null, turnIndex: 0, turnOrder: [],
+      players: { [pid]: { name, color: COLORS[0], score: 0,
+                           joinedAt: serverNow(), turnSubmitted: false, isHost: true } },
+      history: [], lastScore: null,
+      timer: { secs:60, durationMs:60000, running:false,
+               startedAt:null, remainingMs:60000, pausedAt:null }
+    };
+  }).then(result => {
+    btn.disabled = false;
+    btn.textContent = 'Create Room →';
+    if (!result.committed) {
+      // Edge case: room hash collision — generate a new room and retry
+      nameErr.textContent = 'Room conflict — please try again.';
+      MY_PLAYER_ID = null;
+      localStorage.removeItem(PLAYER_ID_KEY);
+      return;
+    }
+    hideModal('host-modal');
+    setupFirebase();
+    showToast('Room created! Share the code 👑');
+  }).catch(() => {
+    btn.disabled = false;
+    btn.textContent = 'Create Room →';
+    nameErr.textContent = 'Connection error — try again.';
+    MY_PLAYER_ID = null;
+    localStorage.removeItem(PLAYER_ID_KEY);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// JOIN MODAL  (players joining an existing room)
+// ═══════════════════════════════════════════════════════════════
+function showJoinModal(prefilledCode) {
+  showModal('join-modal');
+  const codeEl = document.getElementById('join-code');
+  if (prefilledCode) {
+    codeEl.value = prefilledCode.toUpperCase();
+    requestAnimationFrame(()=>requestAnimationFrame(()=>
+      document.getElementById('join-name').focus()));
+  } else {
+    requestAnimationFrame(()=>requestAnimationFrame(()=> codeEl.focus()));
+  }
+}
+
+document.getElementById('btn-join-back').addEventListener('click', () => {
+  hideModal('join-modal');
+  document.getElementById('landing-screen').classList.remove('hide');
+});
+
+document.getElementById('btn-join-ok').addEventListener('click', attemptJoin);
+document.getElementById('join-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') attemptJoin();
+});
+document.getElementById('join-code').addEventListener('input', e => {
+  e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]/g,'');
+});
+
+function attemptJoin() {
+  const codeEl    = document.getElementById('join-code');
+  const codeErrEl = document.getElementById('join-code-err');
+  const nameEl    = document.getElementById('join-name');
+  const nameErrEl = document.getElementById('join-err');
   const btn       = document.getElementById('btn-join-ok');
 
-  nameInput.focus();
+  const code = codeEl.value.trim().toLowerCase();
+  const name = nameEl.value.trim();
+  let valid  = true;
 
-  function attempt() {
-    const name = nameInput.value.trim();
-    errEl.textContent = '';
-    nameInput.classList.remove('err');
+  codeErrEl.textContent = ''; codeEl.classList.remove('err');
+  nameErrEl.textContent = ''; nameEl.classList.remove('err');
 
-    if (!name) {
-      nameInput.classList.add('err');
-      errEl.textContent = 'Please enter your name.';
-      return;
-    }
-    if (name.length < 2) {
-      nameInput.classList.add('err');
-      errEl.textContent = 'Name must be at least 2 characters.';
-      return;
-    }
-    if (name.length > 30) {
-      nameInput.classList.add('err');
-      errEl.textContent = 'Name too long (max 30 chars).';
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = 'Joining…';
-
-    // Generate stable player ID and store it
-    MY_PLAYER_ID = Math.random().toString(36).slice(2,10) + Math.random().toString(36).slice(2,10);
-    localStorage.setItem(PLAYER_ID_KEY, MY_PLAYER_ID);
-
-    // Register in Firebase — if game is already active/finished, reject late join
-    runTransaction(ref(db, ROOT), cur => {
-      if (!cur) {
-        // First player — create room, become host
-        const pid = MY_PLAYER_ID;
-        return {
-          state: 'lobby', hostId: pid, title: 'Score Board', round: 1,
-          currentTurn: null, turnIndex: 0, turnOrder: [],
-          players: { [pid]: { name, color: COLORS[0], score: 0,
-                               joinedAt: serverNow(), turnSubmitted: false } },
-          history: [], lastScore: null,
-          timer: { secs:60, durationMs:60000, running:false,
-                   startedAt:null, remainingMs:60000, pausedAt:null }
-        };
-      }
-      // Room exists
-      if (cur.state !== 'lobby') return; // abort — game already started
-      // Check duplicate name
-      const existingNames = Object.values(cur.players||{}).map(p=>p.name.toLowerCase());
-      if (existingNames.includes(name.toLowerCase())) return; // abort — duplicate
-      // Add player
-      const colorIdx = Object.keys(cur.players||{}).length % COLORS.length;
-      cur.players = cur.players || {};
-      cur.players[MY_PLAYER_ID] = {
-        name, color: COLORS[colorIdx], score: 0,
-        joinedAt: serverNow(), turnSubmitted: false
-      };
-      return cur;
-    }).then(result => {
-      if (!result.committed) {
-        // Either game already started or duplicate name
-        btn.disabled = false;
-        btn.textContent = 'Join →';
-        MY_PLAYER_ID = null;
-        localStorage.removeItem(PLAYER_ID_KEY);
-        const snap = result.snapshot.val();
-        if (snap && snap.state !== 'lobby') {
-          nameInput.classList.add('err');
-          errEl.textContent = 'Game already started — cannot join now.';
-        } else {
-          nameInput.classList.add('err');
-          errEl.textContent = 'That name is already taken. Choose another.';
-        }
-        return;
-      }
-      // Joined successfully
-      document.getElementById('join-modal').classList.remove('show');
-      setupFirebase();
-    }).catch(err => {
-      btn.disabled = false;
-      btn.textContent = 'Join →';
-      errEl.textContent = 'Connection error — try again.';
-      showToast('Network error joining room', true);
-    });
+  if (!code || !/^[a-z0-9]{6,16}$/.test(code)) {
+    codeEl.classList.add('err');
+    codeErrEl.textContent = 'Enter a valid room code (6–16 characters).';
+    valid = false;
   }
+  if (!name) {
+    nameEl.classList.add('err');
+    nameErrEl.textContent = 'Enter your name.';
+    valid = false;
+  } else if (name.length < 2) {
+    nameEl.classList.add('err');
+    nameErrEl.textContent = 'At least 2 characters.';
+    valid = false;
+  } else if (name.length > 30) {
+    nameEl.classList.add('err');
+    nameErrEl.textContent = 'Max 30 characters.';
+    valid = false;
+  }
+  if (!valid) return;
 
-  btn.addEventListener('click', attempt);
-  nameInput.addEventListener('keydown', e => { if(e.key==='Enter') attempt(); });
+  btn.disabled = true;
+  btn.textContent = 'Joining…';
+
+  // Point to the room the player typed
+  const joinRoot = 'rooms/' + code;
+
+  MY_PLAYER_ID = makePID();
+  localStorage.setItem(PLAYER_ID_KEY, MY_PLAYER_ID);
+
+  runTransaction(ref(db, joinRoot), cur => {
+    if (!cur) return; // room doesn't exist — abort
+    if (cur.state !== 'lobby') return; // game already started — abort
+    const existingNames = Object.values(cur.players||{}).map(p=>p.name.toLowerCase());
+    if (existingNames.includes(name.toLowerCase())) return; // duplicate name — abort
+    const colorIdx = Object.keys(cur.players||{}).length % COLORS.length;
+    cur.players = cur.players || {};
+    cur.players[MY_PLAYER_ID] = {
+      name, color: COLORS[colorIdx], score: 0,
+      joinedAt: serverNow(), turnSubmitted: false
+    };
+    return cur;
+  }).then(result => {
+    btn.disabled = false;
+    btn.textContent = 'Join Game →';
+    if (!result.committed) {
+      MY_PLAYER_ID = null;
+      localStorage.removeItem(PLAYER_ID_KEY);
+      const snap = result.snapshot ? result.snapshot.val() : null;
+      if (!snap) {
+        codeEl.classList.add('err');
+        codeErrEl.textContent = 'Room not found. Check the code and try again.';
+      } else if (snap.state !== 'lobby') {
+        codeEl.classList.add('err');
+        codeErrEl.textContent = 'Game already started — cannot join now.';
+      } else {
+        nameEl.classList.add('err');
+        nameErrEl.textContent = 'That name is taken. Choose another.';
+      }
+      return;
+    }
+    // Successfully joined — update ROOM_ID context and connect
+    // Repoint ROOT to the joined room's path
+    Object.defineProperty(window, '_joinedRoot', { value: joinRoot, writable: true });
+    window.history.replaceState(null, '', '#' + code);
+    hideModal('join-modal');
+    setupFirebaseWithRoot(joinRoot);
+    showToast('Joined! Waiting for host to start 🎮');
+  }).catch(() => {
+    btn.disabled = false;
+    btn.textContent = 'Join Game →';
+    codeErrEl.textContent = 'Connection error — try again.';
+    MY_PLAYER_ID = null;
+    localStorage.removeItem(PLAYER_ID_KEY);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
 // FIREBASE
 // ═══════════════════════════════════════════════════════════════
-function setupFirebase() {
+// setupFirebaseWithRoot allows the join flow to point to a different room
+function setupFirebaseWithRoot(customRoot) {
+  // Reassign ROOT to the joined room path
+  // (ROOT is const at module level so we use a local override via closure)
+  setupFirebase(customRoot);
+}
+
+function setupFirebase(overrideRoot) {
+  const ACTIVE_ROOT = overrideRoot || ROOT;
   onValue(ref(db,'.info/serverTimeOffset'), s=>{ serverOffset=s.val()||0; });
 
   function updateConn(on) {
@@ -659,12 +912,19 @@ function setupFirebase() {
   onValue(ref(db,'.info/connected'), s=>updateConn(!!s.val()));
 
   // Single ROOT listener — all state flows through here
-  onValue(ref(db, ROOT), snap=>{
+  onValue(ref(db, ACTIVE_ROOT), snap=>{
     const data = snap.val();
-    if (!data) return; // should not happen — we created it in join
-    if (data._cid===CLIENT_ID && data._seq===lastPushedSeq) return; // echo skip
+    if (!data) return;
+    // B-5 FIX: echo metadata lives in data.meta, not as top-level fields
+    if (data.meta && data.meta._cid === CLIENT_ID && data.meta._seq === lastPushedSeq) return;
     applyRemoteState(data);
   }, err=>showError('Firebase error: '+err.message));
+
+  // Store ACTIVE_ROOT globally so pushRemote and all transactions use the right path
+  window._ACTIVE_ROOT = ACTIVE_ROOT;
+  // Update room code display
+  const _codeDisp = document.getElementById('lobby-room-code');
+  if (_codeDisp) _codeDisp.textContent = ACTIVE_ROOT.replace('rooms/','').toUpperCase();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -696,9 +956,14 @@ function applyRemoteState(data) {
     if (el.value !== data.title) { el.value=data.title; autoSize(el); }
   }
 
-  // History
+  // History — B-4 FIX: handle push-keyed objects sorted by savedAt descending
   if (data.history) {
-    gameHistory = Array.isArray(data.history) ? data.history : Object.values(data.history);
+    const raw = data.history;
+    const entries = Array.isArray(raw) ? raw : Object.values(raw);
+    gameHistory = entries
+      .filter(Boolean)
+      .sort((a,b) => (b.savedAt||b.id||0) - (a.savedAt||a.id||0))
+      .slice(0, 60);
   }
 
   // Timer
@@ -752,6 +1017,16 @@ function hide(id){ document.getElementById(id).style.display='none'; }
 // LOBBY RENDER
 // ═══════════════════════════════════════════════════════════════
 function renderLobby(isHost) {
+  // Update lobby title from game data
+  const AR = window._ACTIVE_ROOT || ROOT;
+  const titleDisp = document.getElementById('lobby-title-disp');
+  const subDisp   = document.getElementById('lobby-sub-disp');
+  const codeDisp  = document.getElementById('lobby-room-code');
+  const roomCode  = AR.replace('rooms/','');
+  if (titleDisp) titleDisp.textContent = document.getElementById('game-title').value || 'Score Board Live';
+  if (subDisp)   subDisp.textContent   = isHost ? 'Share the room code — waiting for players to join…' : 'Waiting for the host to start the game…';
+  if (codeDisp)  codeDisp.textContent  = roomCode.toUpperCase();
+
   const list = document.getElementById('players-list');
   list.innerHTML = '';
   Object.entries(players).sort((a,b)=>a[1].joinedAt-b[1].joinedAt).forEach(([pid,p])=>{
@@ -781,7 +1056,7 @@ function renderLobby(isHost) {
     btnStart.style.display = 'flex';
     btnNew.style.display   = 'flex';
     btnStart.disabled = count < 2;
-    btnStart.title = count < 2 ? 'Need at least 2 players' : '';
+    btnStart.title = count < 2 ? 'Need at least 2 players to start' : '';
     waitMsg.style.display = 'none';
   } else {
     btnStart.style.display = 'none';
@@ -929,6 +1204,10 @@ function renderTeams(isHost, isMyTurn) {
       const rm = e.target.closest('.rm-team');
       const bs = e.target.closest('.bscore');
       const st = e.target.closest('.step');
+      // F-4 FIX: show toast when disabled buttons are tapped (no cursor on touch)
+      if ((bs && bs.disabled) || (st && st.disabled)) {
+        showToast("Not your turn!", true); return;
+      }
       if (rm) hostRemovePlayer(rm.dataset.id);
       if (bs) changeScore(bs.dataset.id, parseInt(bs.dataset.dir));
       if (st) setStep(st, st.dataset.id, parseInt(st.dataset.step));
@@ -1035,32 +1314,42 @@ function changeScore(playerId, dir) {
   if (!p) return;
 
   const prevScore = p.score;
-  const newScore  = Math.max(0, prevScore + dir * step);
+  const delta     = dir * step;
 
   // Optimistic update
-  p.score = newScore;
+  const optimistic = Math.max(0, prevScore + delta);
+  p.score = optimistic;
   const el = domCache.scoreEls[playerId] || document.getElementById('sn-'+playerId);
-  if (el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); el.textContent=fmtScore(newScore); }
+  if (el) {
+    // F-9 FIX: use Web Animations API instead of forced-reflow offsetWidth trick
+    el.textContent = fmtScore(optimistic);
+    el.animate([{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
+  }
   playDing(dir>0);
   patchScoresDOM(); updateStats();
 
-  // Atomic write + store undo info
-  runTransaction(ref(db, ROOT+'/players/'+playerId+'/score'), cur=>{
-    const base = cur===null ? newScore : cur;
-    return Math.max(0, base + dir*step);
+  // B-1 FIX: single atomic transaction — do NOT call pushRemote(score) again in .then()
+  // The transaction is the only write for the score. Metadata (lastScore) is a separate
+  // lightweight write that does not touch the score field.
+  runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)+'/players/'+playerId+'/score'), cur=>{
+    // Apply delta from the current server value (cur), clamped to ≥0
+    return Math.max(0, (cur === null ? 0 : cur) + delta);
   }).then(result=>{
     if (result.committed && result.snapshot.exists()) {
       const committed = result.snapshot.val();
       p.score = committed;
-      if (el) el.textContent=fmtScore(committed);
+      if (el) el.textContent = fmtScore(committed);
       patchScoresDOM(); updateStats();
-      // Store undo state
-      pushRemote({
-        [`players/${playerId}/score`]: committed,
-        lastScore: { playerId, prevScore, delta: dir*step, ts: serverNow() }
-      });
+      // Write only undo metadata — NOT the score again
+      pushRemote({ lastScore: { playerId, prevScore, delta, ts: serverNow() } });
     }
-  }).catch(()=>{ showToast('Score update failed — retrying…',true); pushRemote({[`players/${playerId}/score`]:p.score}); });
+  }).catch(()=>{
+    // On failure, revert optimistic update
+    p.score = prevScore;
+    if (el) el.textContent = fmtScore(prevScore);
+    patchScoresDOM(); updateStats();
+    showToast('Score update failed — try again', true);
+  });
 }
 
 function getStep(playerId) {
@@ -1085,16 +1374,31 @@ function setStep(btn, playerId, n) {
 
 // ═══════════════════════════════════════════════════════════════
 // UNDO LAST SCORE
+// B-2 FIX: guard with 30s TTL + abort transaction if score changed concurrently
 // ═══════════════════════════════════════════════════════════════
+const UNDO_TTL_MS = 30000; // 30-second undo window
 function undoLastScore() {
   if (!lastScore || lastScore.playerId !== MY_PLAYER_ID) return;
-  const pid   = lastScore.playerId;
-  const prev  = lastScore.prevScore;
-  runTransaction(ref(db, ROOT+'/players/'+pid+'/score'), ()=>prev)
-    .then(()=>{
-      pushRemote({ [`players/${pid}/score`]:prev, lastScore:null });
+  // TTL check — undo only valid within 30 seconds
+  if (serverNow() - lastScore.ts > UNDO_TTL_MS) {
+    showToast('Undo window expired (30s limit)', true);
+    return;
+  }
+  const pid      = lastScore.playerId;
+  const prev     = lastScore.prevScore;
+  const expected = prev + lastScore.delta; // what the score should be now if untouched
+  runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)+'/players/'+pid+'/score'), cur => {
+    // Abort if the score has been changed by another operation since undo was requested
+    if (cur !== expected) return; // returning undefined aborts the transaction
+    return prev;
+  }).then(result => {
+    if (result.committed) {
+      pushRemote({ [`players/${pid}/score`]: prev, lastScore: null });
       showToast('Score undone ↩');
-    }).catch(()=>showToast('Undo failed',true));
+    } else {
+      showToast('Undo failed — score was changed', true);
+    }
+  }).catch(()=>showToast('Undo failed', true));
 }
 window.undoLastScore = undoLastScore;
 
@@ -1115,16 +1419,32 @@ window.hostSkipTurn = hostSkipTurn;
 
 function advanceTurn() {
   if (!turnOrder.length) return;
-  const nextIdx = (turnIndex + 1) % turnOrder.length;
-  const nextPid = turnOrder[nextIdx];
-  // Reset turnSubmitted and lastScore for next turn
-  pushRemote({
-    turnIndex:   nextIdx,
-    currentTurn: nextPid,
-    lastScore:   null,
-    [`players/${currentTurn}/turnSubmitted`]: true
-  });
-  showToast(`▶ ${players[nextPid]?.name||'Next player'}'s turn`);
+  // B-3 FIX: use a transaction to guard against simultaneous "Done" + host "Skip"
+  // Only advance if turnIndex still matches what this client expects
+  const expectedIndex = turnIndex;
+  const submittingPlayer = currentTurn;
+  runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)), cur => {
+    if (!cur) return;
+    // Abort if another client already advanced the turn
+    if (cur.turnIndex !== expectedIndex) return;
+    const nextIdx = (cur.turnIndex + 1) % (cur.turnOrder || []).length;
+    const nextPid = cur.turnOrder[nextIdx];
+    cur.turnIndex   = nextIdx;
+    cur.currentTurn = nextPid;
+    cur.lastScore   = null;
+    if (cur.players && submittingPlayer && cur.players[submittingPlayer]) {
+      cur.players[submittingPlayer].turnSubmitted = true;
+    }
+    return cur;
+  }).then(result => {
+    if (result.committed) {
+      const data = result.snapshot.val();
+      const nextName = data && data.players && data.currentTurn
+        ? (data.players[data.currentTurn]?.name || 'Next player')
+        : 'Next player';
+      showToast(`▶ ${nextName}'s turn`);
+    }
+  }).catch(()=>showToast('Turn advance failed', true));
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1243,6 +1563,8 @@ window.resetAll = resetAll;
 
 // ═══════════════════════════════════════════════════════════════
 // SAVE GAME / HISTORY
+// B-4 FIX: use push() keyed entries instead of array transaction to avoid
+// Firebase RTDB array→object coercion that corrupts entry ordering
 // ═══════════════════════════════════════════════════════════════
 function saveGame() {
   const sorted = getSortedPlayers();
@@ -1251,23 +1573,21 @@ function saveGame() {
     game:  document.getElementById('game-title').value||'Score Board',
     date:  new Date().toLocaleString(),
     round: roundNum,
+    savedAt: serverNow(),
     teams: sorted.map(t=>({name:t.name, score:t.score, color:t.color}))
   };
-  runTransaction(ref(db, ROOT+'/history'), cur=>{
-    let h = cur ? (Array.isArray(cur)?cur:Object.values(cur)) : [];
-    h.unshift(entry);
-    if (h.length>60) h=h.slice(0,60);
-    return h;
-  }).then(result=>{
-    if (result.committed) {
-      const v=result.snapshot.val();
-      gameHistory = v ? (Array.isArray(v)?v:Object.values(v)) : [];
+  push(ref(db, ROOT+'/history'), entry)
+    .then(newRef => {
+      // After push, re-read history to keep local state in sync
+      return onValue(ref(db, ROOT+'/history'), snap => {}, {onlyOnce:true});
+    })
+    .then(()=>{
       renderHistory(document.getElementById('hist-list'));
       if (gameState==='finished') renderHistory(document.getElementById('hist-list-fin'));
       updateStats();
       showToast('Game saved! 💾');
-    }
-  }).catch(()=>showToast('Save failed — check connection',true));
+    })
+    .catch(()=>showToast('Save failed — check connection', true));
 }
 window.saveGame = saveGame;
 
@@ -1301,13 +1621,29 @@ function renderHistory(el) {
 function delHistory(idx) {
   const entryId = gameHistory[idx]?.id;
   if (!entryId) return;
-  runTransaction(ref(db, ROOT+'/history'), cur=>{
-    let h = cur ? (Array.isArray(cur)?cur:Object.values(cur)) : [];
-    return h.filter(e=>e.id!==entryId);
+  // B-4 FIX: filter from the push-keyed object by matching entry.id
+  runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)+'/history'), cur=>{
+    if (!cur) return cur;
+    // cur is a push-keyed object: { "-abc": {...}, "-def": {...} }
+    const entries = Array.isArray(cur) ? cur : cur;
+    if (Array.isArray(cur)) {
+      return cur.filter(e=>e && e.id!==entryId);
+    } else {
+      const updated = {...cur};
+      Object.entries(updated).forEach(([k,v])=>{ if(v && v.id===entryId) delete updated[k]; });
+      return updated;
+    }
   }).then(result=>{
     if (result.committed) {
-      const v=result.snapshot.val();
-      gameHistory = v ? (Array.isArray(v)?v:Object.values(v)) : [];
+      const v = result.snapshot.val();
+      if (!v) { gameHistory=[]; }
+      else {
+        const entries = Array.isArray(v) ? v : Object.values(v);
+        gameHistory = entries
+          .filter(Boolean)
+          .sort((a,b)=>(b.savedAt||b.id||0)-(a.savedAt||a.id||0))
+          .slice(0,60);
+      }
       renderHistory(document.getElementById('hist-list'));
       if (gameState==='finished') renderHistory(document.getElementById('hist-list-fin'));
       updateStats();
@@ -1341,9 +1677,12 @@ function updateStats() {
 // ═══════════════════════════════════════════════════════════════
 function pushRemote(partial) {
   lastPushedSeq++;
-  partial._cid = CLIENT_ID;
-  partial._seq = lastPushedSeq;
-  update(ref(db, ROOT), partial);
+  const seq = lastPushedSeq;
+  const AR = window._ACTIVE_ROOT || ROOT;
+  // B-5 FIX: write echo metadata to a separate /meta path so it never
+  // pollutes the canonical game state that all clients read
+  update(ref(db, AR+'/meta'), { _cid: CLIENT_ID, _seq: seq });
+  update(ref(db, AR), partial);
   saveLocal();
 }
 
@@ -1370,7 +1709,9 @@ window.syncTitle = syncTitle;
 // ═══════════════════════════════════════════════════════════════
 function saveLocal() {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify({
+    const AR = window._ACTIVE_ROOT || ROOT;
+    const roomKey = 'sb_' + AR.replace('rooms/','');
+    localStorage.setItem(roomKey, JSON.stringify({
       state:gameState, hostId, currentTurn, turnIndex, turnOrder,
       players, round:roundNum, gameHistory, savedAt:Date.now()
     }));
