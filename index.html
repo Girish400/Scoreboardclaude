@@ -75,6 +75,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
 /* ── LOBBY VIEW ─────────────────────────────────────── */
 #lobby-view{display:none;}
+#lobby-view.view-visible,#game-view.view-visible,#finished-view.view-visible{display:block !important;}
 .lobby-header{text-align:center;margin-bottom:32px;}
 .lobby-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.8rem,9vw,5rem);letter-spacing:5px;color:var(--gold);text-shadow:0 0 40px rgba(245,200,66,.3);}
 .lobby-sub{color:var(--muted);font-size:.9rem;margin-top:6px;}
@@ -739,7 +740,8 @@ function attemptHostCreate() {
 
   const pid = MY_PLAYER_ID;
   runTransaction(ref(db, hostRoot), cur => {
-    if (cur) return; // collision -- abort
+    // Only abort if room already has meaningful data (state field present)
+    if (cur && cur.state) return; // collision -- abort
     return {
       state: 'lobby', hostId: pid, title, round: 1,
       currentTurn: null, turnIndex: 0, turnOrder: [],
@@ -762,6 +764,14 @@ function attemptHostCreate() {
     hideModal('host-modal');
     document.getElementById('game-title').value = title;
     autoSize(document.getElementById('game-title'));
+    // Show lobby immediately (don't wait for Firebase onValue)
+    // applyRemoteState will re-render once Firebase confirms
+    gameState = 'lobby';
+    hostId    = pid;
+    players   = { [pid]: { name, color: COLORS[0], score: 0,
+                            joinedAt: Date.now(), turnSubmitted: false, isHost: true } };
+    localTeams = playersToTeams(players);
+    renderView(true);
     setupFirebase(hostRoot);
     showToast('Room created! Share the code. 🎉');
   }).catch(() => {
@@ -878,10 +888,17 @@ function attemptJoin() {
       return;
     }
     // Successfully joined — update ROOM_ID context and connect
-    // Repoint ROOT to the joined room's path
-    Object.defineProperty(window, '_joinedRoot', { value: joinRoot, writable: true });
     window.history.replaceState(null, '', '#' + code);
     hideModal('join-modal');
+    // Show lobby immediately with known player info
+    gameState = 'lobby';
+    const joinedSnap = result.snapshot.val();
+    if (joinedSnap && joinedSnap.players) {
+      hostId    = joinedSnap.hostId || null;
+      players   = joinedSnap.players;
+      localTeams = playersToTeams(players);
+    }
+    renderView(true);
     setupFirebaseWithRoot(joinRoot);
     showToast('Joined! Waiting for host to start 🎮');
   }).catch(() => {
@@ -920,20 +937,32 @@ function setupFirebase(overrideRoot) {
   }
   onValue(ref(db,'.info/connected'), s=>updateConn(!!s.val()));
 
-  // Single ROOT listener — all state flows through here
-  onValue(ref(db, ACTIVE_ROOT), snap=>{
-    const data = snap.val();
-    if (!data) return;
-    // B-5 FIX: echo metadata lives in data.meta, not as top-level fields
-    if (data.meta && data.meta._cid === CLIENT_ID && data.meta._seq === lastPushedSeq) return;
-    applyRemoteState(data);
-  }, err=>showError('Firebase error: '+err.message));
-
   // Store ACTIVE_ROOT globally so pushRemote and all transactions use the right path
   window._ACTIVE_ROOT = ACTIVE_ROOT;
   // Update room code display
   const _codeDisp = document.getElementById('lobby-room-code');
   if (_codeDisp) _codeDisp.textContent = ACTIVE_ROOT.replace('rooms/','').toUpperCase();
+
+  // Track whether we have rendered at least once for this listener.
+  // The FIRST snapshot must ALWAYS render (it's the authoritative state from Firebase
+  // after room creation or page load). Only suppress subsequent echo-back snapshots.
+  let firstSnapshotReceived = false;
+
+  onValue(ref(db, ACTIVE_ROOT), snap=>{
+    const data = snap.val();
+    if (!data) return;
+
+    // Echo suppression: skip ONLY if this is NOT the first snapshot,
+    // AND the metadata confirms this update originated from us.
+    // This ensures the lobby always renders after room creation.
+    if (firstSnapshotReceived &&
+        data.meta && data.meta._cid === CLIENT_ID &&
+        data.meta._seq === lastPushedSeq) {
+      return;
+    }
+    firstSnapshotReceived = true;
+    applyRemoteState(data);
+  }, err=>showError('Firebase error: '+err.message));
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1019,8 +1048,18 @@ function renderView(stateChanged) {
   }
 }
 
-function show(id){ const el=document.getElementById(id); if(!el) return; const tag=el.tagName.toLowerCase(); el.style.display=(tag==='div'?'block':''); }
-function hide(id){ document.getElementById(id).style.display='none'; }
+function show(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.classList.add('view-visible');
+  el.style.display='';  // clear any inline override
+}
+function hide(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.classList.remove('view-visible');
+  el.style.display='none';
+}
 
 // ═══════════════════════════════════════════════════════════════
 // LOBBY RENDER
