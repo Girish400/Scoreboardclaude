@@ -500,15 +500,15 @@ const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.fir
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-function getRoomId() {
+// Get room ID from URL hash only -- do NOT auto-generate at load time.
+// The host generates a new ID when they click "Create Room".
+function getExistingRoomId() {
   const h = location.hash.replace('#','').trim();
   if (h && /^[a-z0-9]{6,16}$/.test(h)) return h;
-  const id = Math.random().toString(36).slice(2,10);
-  window.history.replaceState(null,'','#'+id);
-  return id;
+  return null;
 }
-const ROOM_ID = getRoomId();
-const ROOT    = 'rooms/' + ROOM_ID;
+const ROOM_ID = getExistingRoomId(); // null on fresh visit, string if arrived via link
+const ROOT    = ROOM_ID ? 'rooms/' + ROOM_ID : null;
 
 // ── Per-session identity ──────────────────────────────────────
 // CLIENT_ID suppresses echo; PLAYER_ID is the durable identity stored
@@ -516,9 +516,9 @@ const ROOT    = 'rooms/' + ROOM_ID;
 const CLIENT_ID  = Math.random().toString(36).slice(2);
 let   lastPushedSeq = 0;
 
-const LS_KEY       = 'sb_' + ROOM_ID;           // room-scoped storage
-const PLAYER_ID_KEY = 'sb_pid_' + ROOM_ID;      // this player's durable id
-let MY_PLAYER_ID   = localStorage.getItem(PLAYER_ID_KEY) || null;
+const LS_KEY        = ROOM_ID ? 'sb_' + ROOM_ID : null;
+const PLAYER_ID_KEY = ROOM_ID ? 'sb_pid_' + ROOM_ID : null;
+let MY_PLAYER_ID    = PLAYER_ID_KEY ? (localStorage.getItem(PLAYER_ID_KEY) || null) : null;
 
 let serverOffset = 0;
 function serverNow() { return Date.now() + serverOffset; }
@@ -629,27 +629,23 @@ updateClock();
 setInterval(updateClock,1000);
 renderTimerDisplay(timerSecs);
 autoSize(document.getElementById('game-title'));
-document.getElementById('lobby-room-code').textContent = ROOM_ID.toUpperCase();
+// Room code display updated later by setupFirebase() once room is established
 document.body.addEventListener('touchstart',()=>{
   if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
 },{once:true});
 
-// ── Determine entry flow ──────────────────────────────────────
-// If the URL has a hash that looks like a room code, show the landing
-// with the Join panel pre-filled. If we already have a stored player ID
-// for this room, skip directly to the game.
-const IS_HASH_ROOM = !!(location.hash.replace('#','').trim().match(/^[a-z0-9]{6,16}$/));
-
-if (MY_PLAYER_ID) {
-  // Returning player — skip landing entirely
+// ── Determine entry flow ──────────────────────────────────
+// ROOM_ID is null on fresh visits. Only non-null if arrived via shared link.
+if (MY_PLAYER_ID && ROOM_ID) {
+  // Returning player to a known room -- reconnect directly
   hideLanding();
   setupFirebase();
-} else if (IS_HASH_ROOM) {
-  // Arrived via shared link — skip landing, open join panel with code pre-filled
+} else if (ROOM_ID && !MY_PLAYER_ID) {
+  // Arrived via shared link -- pre-fill code in join modal
   hideLanding();
   showJoinModal(ROOM_ID);
 } else {
-  // Fresh visit — show landing screen
+  // Fresh visit (no hash) -- show landing screen
   setupLanding();
 }
 
@@ -727,43 +723,51 @@ function attemptHostCreate() {
   if (name.length > 30) { nameEl.classList.add('err'); nameErr.textContent = 'Max 30 characters.'; return; }
 
   btn.disabled = true;
-  btn.textContent = 'Creating…';
+  btn.textContent = 'Creating...';
+
+  // Generate fresh room ID HERE (not at page load) so the landing screen always shows
+  const newRoomId = Math.random().toString(36).slice(2, 10);
+  const hostRoot  = 'rooms/' + newRoomId;
+  const pidKey    = 'sb_pid_' + newRoomId;
 
   MY_PLAYER_ID = makePID();
-  localStorage.setItem(PLAYER_ID_KEY, MY_PLAYER_ID);
+  localStorage.setItem(pidKey, MY_PLAYER_ID);
+
+  // Update URL hash so share link and page refresh work
+  window.history.replaceState(null, '', '#' + newRoomId);
 
   const pid = MY_PLAYER_ID;
-  // Host always creates a brand-new room — transaction only runs if room doesn't exist yet
-  runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)), cur => {
-    if (cur) return; // room already exists — abort (shouldn't happen on fresh room ID)
+  runTransaction(ref(db, hostRoot), cur => {
+    if (cur) return; // collision -- abort
     return {
       state: 'lobby', hostId: pid, title, round: 1,
       currentTurn: null, turnIndex: 0, turnOrder: [],
       players: { [pid]: { name, color: COLORS[0], score: 0,
                            joinedAt: serverNow(), turnSubmitted: false, isHost: true } },
       history: [], lastScore: null,
-      timer: { secs:60, durationMs:60000, running:false,
-               startedAt:null, remainingMs:60000, pausedAt:null }
+      timer: { secs: 60, durationMs: 60000, running: false,
+               startedAt: null, remainingMs: 60000, pausedAt: null }
     };
   }).then(result => {
     btn.disabled = false;
-    btn.textContent = 'Create Room →';
+    btn.textContent = 'Create Room';
     if (!result.committed) {
-      // Edge case: room hash collision — generate a new room and retry
-      nameErr.textContent = 'Room conflict — please try again.';
+      nameErr.textContent = 'Room conflict -- please try again.';
       MY_PLAYER_ID = null;
-      localStorage.removeItem(PLAYER_ID_KEY);
+      localStorage.removeItem(pidKey);
+      window.history.replaceState(null, '', location.pathname);
       return;
     }
     hideModal('host-modal');
-    setupFirebase();
-    showToast('Room created! Share the code 👑');
+    setupFirebase(hostRoot);
+    showToast('Room created! Share the code.');
   }).catch(() => {
     btn.disabled = false;
-    btn.textContent = 'Create Room →';
-    nameErr.textContent = 'Connection error — try again.';
+    btn.textContent = 'Create Room';
+    nameErr.textContent = 'Connection error -- try again.';
     MY_PLAYER_ID = null;
-    localStorage.removeItem(PLAYER_ID_KEY);
+    localStorage.removeItem(pidKey);
+    window.history.replaceState(null, '', location.pathname);
   });
 }
 
@@ -1018,7 +1022,7 @@ function hide(id){ document.getElementById(id).style.display='none'; }
 // ═══════════════════════════════════════════════════════════════
 function renderLobby(isHost) {
   // Update lobby title from game data
-  const AR = window._ACTIVE_ROOT || ROOT;
+  const AR = window._ACTIVE_ROOT || ROOT || 'rooms/unknown';
   const titleDisp = document.getElementById('lobby-title-disp');
   const subDisp   = document.getElementById('lobby-sub-disp');
   const codeDisp  = document.getElementById('lobby-room-code');
