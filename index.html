@@ -526,7 +526,7 @@ function serverNow() { return Date.now() + serverOffset; }
 // ═══════════════════════════════════════════════════════════════
 // GAME STATE  (mirrors Firebase)
 // ═══════════════════════════════════════════════════════════════
-const COLORS = ['#f5c842','#34d97b','#f07844','#4f8ef7','#a78bfa','#f0504d','#22d3ee'];
+const COLORS = ['#f5c842','#34d97b','#f07844','#4f8ef7','#a78bfa','#f0504d','#22d3ee','#ec4899'];
 let gameState     = 'lobby';   // "lobby" | "active" | "finished"
 let hostId        = null;
 let currentTurn   = null;      // playerId whose turn it is
@@ -639,6 +639,7 @@ document.body.addEventListener('touchstart',()=>{
 if (MY_PLAYER_ID && ROOM_ID) {
   // Returning player to a known room -- reconnect directly
   hideLanding();
+  loadLocalState(ROOM_ID); // show cached state while Firebase connects
   setupFirebase();
 } else if (ROOM_ID && !MY_PLAYER_ID) {
   // Arrived via shared link -- pre-fill code in join modal
@@ -759,8 +760,10 @@ function attemptHostCreate() {
       return;
     }
     hideModal('host-modal');
+    document.getElementById('game-title').value = title;
+    autoSize(document.getElementById('game-title'));
     setupFirebase(hostRoot);
-    showToast('Room created! Share the code.');
+    showToast('Room created! Share the code. 🎉');
   }).catch(() => {
     btn.disabled = false;
     btn.textContent = 'Create Room';
@@ -840,7 +843,8 @@ function attemptJoin() {
   const joinRoot = 'rooms/' + code;
 
   MY_PLAYER_ID = makePID();
-  localStorage.setItem(PLAYER_ID_KEY, MY_PLAYER_ID);
+  const joinPidKey = 'sb_pid_' + code;
+  localStorage.setItem(joinPidKey, MY_PLAYER_ID);
 
   runTransaction(ref(db, joinRoot), cur => {
     if (!cur) return; // room doesn't exist — abort
@@ -859,7 +863,7 @@ function attemptJoin() {
     btn.textContent = 'Join Game →';
     if (!result.committed) {
       MY_PLAYER_ID = null;
-      localStorage.removeItem(PLAYER_ID_KEY);
+      localStorage.removeItem(joinPidKey);
       const snap = result.snapshot ? result.snapshot.val() : null;
       if (!snap) {
         codeEl.classList.add('err');
@@ -885,7 +889,8 @@ function attemptJoin() {
     btn.textContent = 'Join Game →';
     codeErrEl.textContent = 'Connection error — try again.';
     MY_PLAYER_ID = null;
-    localStorage.removeItem(PLAYER_ID_KEY);
+    const joinPidKey2 = 'sb_pid_' + code;
+    localStorage.removeItem(joinPidKey2);
   });
 }
 
@@ -1014,7 +1019,7 @@ function renderView(stateChanged) {
   }
 }
 
-function show(id){ document.getElementById(id).style.display=''; }
+function show(id){ const el=document.getElementById(id); if(!el) return; const tag=el.tagName.toLowerCase(); el.style.display=(tag==='div'?'block':''); }
 function hide(id){ document.getElementById(id).style.display='none'; }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1502,7 +1507,7 @@ window.hostNewGame = hostNewGame;
 function hostRemovePlayer(pid) {
   if (MY_PLAYER_ID !== hostId || gameState !== 'lobby') return;
   if (pid === hostId) { showToast('Cannot remove the host',true); return; }
-  if (Object.keys(players).length <= 1) return;
+  if (Object.keys(players).length <= 1) { showToast('Cannot remove the last player',true); return; }
   if (!confirm(`Remove ${players[pid]?.name}?`)) return;
   const updated = {...players};
   delete updated[pid];
@@ -1515,7 +1520,7 @@ function hostRemovePlayer(pid) {
 function updatePlayerName(pid, val) {
   if (gameState !== 'lobby') { showToast('Cannot rename after game starts',true); return; }
   if (pid !== MY_PLAYER_ID && MY_PLAYER_ID !== hostId) return;
-  const trimmed = val.trim();
+  const trimmed = val.replace(/<[^>]*>/g,'').trim();
   if (!trimmed || trimmed.length < 2) { showToast('Name too short (min 2 chars)',true); return; }
   if (trimmed.length > 30) { showToast('Name too long (max 30 chars)',true); return; }
   // Duplicate check
@@ -1580,10 +1585,26 @@ function saveGame() {
     savedAt: serverNow(),
     teams: sorted.map(t=>({name:t.name, score:t.score, color:t.color}))
   };
-  push(ref(db, ROOT+'/history'), entry)
-    .then(newRef => {
-      // After push, re-read history to keep local state in sync
-      return onValue(ref(db, ROOT+'/history'), snap => {}, {onlyOnce:true});
+  const histRef = ref(db, (window._ACTIVE_ROOT||ROOT)+'/history');
+  push(histRef, entry)
+    .then(() => {
+      // Prune to max 60 entries
+      return runTransaction(histRef, cur => {
+        if (!cur) return cur;
+        const arr = Array.isArray(cur) ? cur : Object.values(cur);
+        if (arr.length <= 60) return cur;
+        // If push-keyed object, remove oldest keys
+        if (!Array.isArray(cur)) {
+          const sorted = Object.entries(cur)
+            .filter(([,v])=>v)
+            .sort((a,b)=>(a[1].savedAt||a[1].id||0)-(b[1].savedAt||b[1].id||0));
+          const toRemove = sorted.slice(0, sorted.length - 60);
+          const updated = {...cur};
+          toRemove.forEach(([k])=>delete updated[k]);
+          return updated;
+        }
+        return cur.filter(Boolean).slice(-60);
+      });
     })
     .then(()=>{
       renderHistory(document.getElementById('hist-list'));
@@ -1613,14 +1634,45 @@ function renderHistory(el) {
         <div class="hist-name">${esc(e.game)} · Round ${e.round}</div>
         <div class="hist-chips" style="margin-top:6px">${chips}</div>
       </div>
+      <button class="hist-restore" data-idx="${i}">↩ Restore</button>
       <button class="hist-del" data-idx="${i}">🗑</button>
     </div>`;
   }).join('');
   el.onclick = ev=>{
     const d=ev.target.closest('.hist-del');
+    const r=ev.target.closest('.hist-restore');
     if (d) delHistory(parseInt(d.dataset.idx));
+    if (r) restoreHistory(parseInt(r.dataset.idx));
   };
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// RESTORE HISTORY  (test case #30)
+// ═══════════════════════════════════════════════════════════════
+function restoreHistory(idx) {
+  const entry = gameHistory[idx];
+  if (!entry || !entry.teams) { showToast('Cannot restore — entry has no teams', true); return; }
+  if (MY_PLAYER_ID !== hostId) { showToast('Only the host can restore a game state', true); return; }
+  if (!confirm('Restore scores from "' + entry.game + ' · Round ' + entry.round + '"? This will overwrite current scores.')) return;
+  const updatedPlayers = {};
+  const teamList = entry.teams;
+  // Match saved teams to current players by name
+  const currentPids = Object.keys(players);
+  teamList.forEach((saved, i) => {
+    const pid = currentPids.find(p => players[p].name === saved.name) || currentPids[i];
+    if (pid && players[pid]) {
+      updatedPlayers['players/' + pid + '/score'] = saved.score;
+    }
+  });
+  if (Object.keys(updatedPlayers).length === 0) { showToast('Could not match any teams', true); return; }
+  pushRemote({ ...updatedPlayers, round: entry.round });
+  document.getElementById('game-title').value = entry.game;
+  autoSize(document.getElementById('game-title'));
+  pushRemote({ title: entry.game });
+  showToast('Restored: ' + entry.game + ' ↩');
+}
+window.restoreHistory = restoreHistory;
 
 function delHistory(idx) {
   const entryId = gameHistory[idx]?.id;
@@ -1722,6 +1774,27 @@ function saveLocal() {
   } catch(e){}
 }
 
+
+function loadLocalState(roomId) {
+  try {
+    const key = 'sb_' + roomId;
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    const cached = JSON.parse(raw);
+    if (!cached || !cached.players) return;
+    // Apply cached state optimistically until Firebase fires
+    gameState   = cached.state   || 'lobby';
+    hostId      = cached.hostId  || null;
+    currentTurn = cached.currentTurn || null;
+    turnIndex   = cached.turnIndex   || 0;
+    turnOrder   = cached.turnOrder   || [];
+    roundNum    = cached.round       || 1;
+    players     = cached.players     || {};
+    gameHistory = (cached.gameHistory||[]).slice(0,60);
+    localTeams  = playersToTeams(players);
+    renderView(true);
+  } catch(e) {}
+}
 // ═══════════════════════════════════════════════════════════════
 // TIMER
 // ═══════════════════════════════════════════════════════════════
@@ -1872,7 +1945,10 @@ function showCountdown(n){
 // ═══════════════════════════════════════════════════════════════
 function getShareUrl(){
   if(location.protocol==='file:') return null;
-  return location.origin+location.pathname+'#'+ROOM_ID;
+  const AR = window._ACTIVE_ROOT || ROOT;
+  const roomId = AR ? AR.replace('rooms/','') : ROOM_ID;
+  if (!roomId) return null;
+  return location.origin+location.pathname+'#'+roomId;
 }
 function openQR(){
   const url=getShareUrl();
