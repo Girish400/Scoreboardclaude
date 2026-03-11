@@ -985,11 +985,15 @@ function setupFirebase(overrideRoot) {
     if (!data) return;
 
     // Echo suppression: skip ONLY if this is NOT the first snapshot,
-    // AND the metadata confirms this update originated from us.
-    // This ensures the lobby always renders after room creation.
+    // AND the metadata confirms this update originated from us,
+    // AND the game state has NOT changed (never suppress a state transition).
+    // FIX: "Start Game" / "End Game" pushes were being suppressed because
+    // lastPushedSeq matched — leaving the host stuck on the wrong view.
+    const incomingState = data.state || 'lobby';
     if (firstSnapshotReceived &&
         data.meta && data.meta._cid === CLIENT_ID &&
-        data.meta._seq === lastPushedSeq) {
+        data.meta._seq === lastPushedSeq &&
+        incomingState === gameState) {
       return;
     }
     firstSnapshotReceived = true;
