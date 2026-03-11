@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Score Board Live</title>
+<!-- v15: Bug fixes for TC#11,#14,#16,#20,#24,#27,#30,#34 -->
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -447,7 +448,9 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
         <div class="t-pre" onclick="setPreset(5,this)">5 min</div>
         <div class="t-pre" onclick="setPreset(10,this)">10 min</div>
         <div class="t-custom">
-          <input type="number" id="t-custom-inp" placeholder="mm" min="1" max="99" oninput="setCustomTimer()">
+          <input type="number" id="t-custom-inp" placeholder="mm" min="1" max="99"
+            onchange="setCustomTimer()"
+            onkeydown="if(event.key==='Enter')setCustomTimer()">
           <span style="color:var(--muted);font-size:.78rem">min</span>
         </div>
       </div>
@@ -1053,7 +1056,8 @@ function playersToTeams(pmap) {
       score: p.score||0,
       color: p.color||COLORS[0],
       joinedAt: p.joinedAt||0,
-      turnSubmitted: p.turnSubmitted||false
+      turnSubmitted: p.turnSubmitted||false,
+      step: p.step||1
     }))
     .sort((a,b)=>a.joinedAt-b.joinedAt); // stable tie-breaking: earlier join ranks higher
 }
@@ -1239,7 +1243,7 @@ function renderTeams(isHost, isMyTurn) {
       });
       const bm = box.querySelector('.bminus');
       const bp = box.querySelector('.bplus');
-      if (bm) bm.disabled = !btnEnabled;
+      if (bm) bm.disabled = !btnEnabled || (btnEnabled && team.score <= 0);
       if (bp) bp.disabled = !btnEnabled;
       // Lock message
       const lk = box.querySelector('.lock-msg');
@@ -1254,9 +1258,14 @@ function renderTeams(isHost, isMyTurn) {
           }
         } else { lk.textContent=''; }
       }
-      // Remove button
+      // Remove button — visible for host in lobby; disabled when at minimum players (2)
       const rm = box.querySelector('.rm-team');
-      if (rm) rm.style.display = (isHost && gameState==='lobby') ? '' : 'none';
+      const atMinimum = Object.keys(players).length <= 2;
+      if (rm) {
+        rm.style.display = (isHost && gameState==='lobby') ? '' : 'none';
+        rm.disabled = atMinimum || rm.dataset.id === hostId;
+        rm.title = atMinimum ? 'Need at least 2 players' : '';
+      }
     }
 
     // Classes
@@ -1308,7 +1317,7 @@ function buildTeamHTML(team, step, btnEnabled, isHost, state) {
            data-id="${team.id}" placeholder="Name"
            ${(state!=='lobby'&&!isHost)?'disabled':''}>
     <div class="ctrls">
-      <button class="bscore bminus" data-id="${team.id}" data-dir="-1" ${btnEnabled?'':'disabled'}>−</button>
+      <button class="bscore bminus" data-id="${team.id}" data-dir="-1" ${(!btnEnabled||team.score<=0)?'disabled':''}>−</button>
       <div class="score-num" id="sn-${team.id}">${fmtScore(team.score)}</div>
       <button class="bscore bplus"  data-id="${team.id}" data-dir="1"  ${btnEnabled?'':'disabled'}>+</button>
     </div>
@@ -1401,6 +1410,12 @@ function changeScore(playerId, dir) {
     // F-9 FIX: use Web Animations API instead of forced-reflow offsetWidth trick
     el.textContent = fmtScore(optimistic);
     el.animate([{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
+  }
+  // Update minus button disabled state based on new score
+  const box = domCache.teamBoxes[playerId] || document.querySelector(`.team-box[data-id="${playerId}"]`);
+  if (box) {
+    const bm = box.querySelector('.bminus');
+    if (bm) bm.disabled = optimistic <= 0;
   }
   playDing(dir>0);
   patchScoresDOM(); updateStats();
@@ -1575,7 +1590,7 @@ window.hostNewGame = hostNewGame;
 function hostRemovePlayer(pid) {
   if (MY_PLAYER_ID !== hostId || gameState !== 'lobby') return;
   if (pid === hostId) { showToast('Cannot remove the host',true); return; }
-  if (Object.keys(players).length <= 1) { showToast('Cannot remove the last player',true); return; }
+  if (Object.keys(players).length <= 2) { showToast('Need at least 2 players — cannot remove',true); return; }
   if (!confirm(`Remove ${players[pid]?.name}?`)) return;
   const updated = {...players};
   delete updated[pid];
@@ -1656,6 +1671,8 @@ function saveGame() {
   const histRef = ref(db, (window._ACTIVE_ROOT||ROOT)+'/history');
   push(histRef, entry)
     .then(() => {
+      // Update local gameHistory immediately so renderHistory reflects the new entry
+      gameHistory = [entry, ...gameHistory].slice(0, 60);
       // Prune to max 60 entries
       return runTransaction(histRef, cur => {
         if (!cur) return cur;
@@ -1734,10 +1751,10 @@ function restoreHistory(idx) {
     }
   });
   if (Object.keys(updatedPlayers).length === 0) { showToast('Could not match any teams', true); return; }
-  pushRemote({ ...updatedPlayers, round: entry.round });
+  // Single atomic push: scores + round + title together (prevents double-echo suppression)
+  pushRemote({ ...updatedPlayers, round: entry.round, title: entry.game });
   document.getElementById('game-title').value = entry.game;
   autoSize(document.getElementById('game-title'));
-  pushRemote({ title: entry.game });
   showToast('Restored: ' + entry.game + ' ↩');
 }
 window.restoreHistory = restoreHistory;
@@ -1786,10 +1803,14 @@ function updateStats() {
   const leader  = sorted[0];
   const gap     = sorted.length>1 ? sorted[0].score-sorted[1].score : 0;
   const curName = players[currentTurn]?.name||'—';
+  // TC#24: if there's a tie for first place, "Leading" should show no single winner
+  const topScore = leader ? leader.score : 0;
+  const tiedForFirst = sorted.filter(t=>t.score===topScore).length > 1;
+  const leaderName = (!leader || topScore===0 || tiedForFirst) ? '—' : esc(leader.name);
   el.innerHTML = `
     <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${fmtScore(total)}</div></div>
-    <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:.9rem;padding-top:8px">${leader?esc(leader.name):'—'}</div></div>
-    <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${fmtScore(gap)}</div></div>
+    <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:.9rem;padding-top:8px">${leaderName}</div></div>
+    <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${tiedForFirst?0:fmtScore(gap)}</div></div>
     <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${gameHistory.length}</div></div>
     <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
     <div class="stat"><div class="stat-l">Current Turn</div><div class="stat-v" style="font-size:.9rem;padding-top:8px">${esc(curName)}</div></div>
@@ -2021,8 +2042,10 @@ function getShareUrl(){
 function openQR(){
   const url=getShareUrl();
   if(!url){showToast('⚠️ Host this file on a web server to share via QR',true);return;}
+  // TC#34: Always verify the QR URL matches current URL; regenerate if stale
+  const existingUrlText = document.getElementById('qr-url-text').textContent;
   document.getElementById('qr-url-text').textContent=url;
-  if(!qrGenerated){
+  if(!qrGenerated || existingUrlText !== url){
     document.getElementById('qr-box').innerHTML='';
     new QRCode(document.getElementById('qr-box'),{text:url,width:220,height:220,
       colorDark:'#f5c842',colorLight:'#10131a',correctLevel:QRCode.CorrectLevel.H});
@@ -2058,7 +2081,7 @@ function showToast(msg, isErr=false){
   t.textContent=msg;
   t.className='toast show'+(isErr?' err':'');
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+  toastTimer=setTimeout(()=>{ t.classList.remove('show'); },2800);
 }
 function showError(msg){
   const b=document.getElementById('err-banner');
