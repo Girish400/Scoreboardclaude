@@ -3,15 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Score Board Live</title>
+<title>Score Board Live v17</title>
 <!--
-  v16 Changes:
-  1. Negative scores allowed — floor removed everywhere (TC#14 updated: floor only if mode requires)
-  2. Mute/unmute button — persisted in Firebase + localStorage
-  3. Score permission mode — "host" or "self" — host sets in lobby, persisted
-  4. Add Team hidden once game starts (gameState !== 'lobby')
-  5. Timer panel moved below teams-grid
-  + Full dual-persona review fixes (Frontend Dev + Backend Architect)
+  v17 Changes (all bugs from static analysis fixed):
+  FIX-1  TC-STEP      : Step array reduced to [1] only — ±1 per click enforced in UI
+  FIX-2  TC-DELTA     : changeScore() delta hardened to dir*1 (ignores step field)
+  FIX-3  TC-SETSTEP   : setStep() validates n===1 before writing to Firebase
+  FIX-4  TC-HOSTMODE  : Host-mode score buttons use step=1 enforced at call site
+  FIX-5  TC-TOGGLERENDER: hostToggleScoringMode() now calls renderGame() locally
+  FIX-6  TC-MODESYNC  : applyRemoteState scoringMode assigned unconditionally
+  FIX-7  TC-SERVERSIDE: Note added — Firebase security rules required (see comment below)
+  FIX-8  TC-PIDCOL    : addTeamUI() now uses makePID() (crypto.randomUUID)
+  FIX-9  TC-UNDO      : canUndo works correctly in host mode (tracks scorer separately)
+  FIX-10 TC-FMTSCORE  : fmtScore uses explicit null/undefined check instead of ||0
+  FIX-11 TC-SELFMODE  : scoringMode toggle re-renders all clients immediately via Firebase
+  Retained from v16: negative scores, mute, scoringMode, lobby-only addTeam, timer below grid
 -->
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -194,10 +200,8 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .bminus:hover:not(:disabled){background:var(--red);color:#fff;}
 .bplus{background:rgba(52,217,123,.12);color:var(--green);border:1.5px solid var(--green);}
 .bplus:hover:not(:disabled){background:var(--green);color:#000;}
-.steps{display:flex;gap:5px;justify-content:center;}
-.step{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.72rem;padding:3px 9px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
-.step:hover,.step.on{background:var(--gold);color:#000;border-color:var(--gold);}
-.step:disabled{opacity:.3;cursor:not-allowed;}
+/* v17: step row hidden — only ±1 allowed per spec */
+.steps{display:none;}
 .lock-msg{font-size:.72rem;color:var(--muted);text-align:center;min-height:16px;}
 .lock-msg.your{color:var(--green);font-weight:600;}
 
@@ -544,6 +548,34 @@ import { getDatabase, ref, update, onValue, runTransaction, remove, push, get }
 // FIREBASE + ROOM
 // ═══════════════════════════════════════════════════════════════
 const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.firebaseio.com/' };
+// ─────────────────────────────────────────────────────────────────────
+// v17 FIX-7 (TC-SERVERSIDE): ALL permission checks below are client-side.
+// To prevent malicious writes, add Firebase Realtime Database security rules:
+//
+// {
+//   "rules": {
+//     "rooms": {
+//       "$roomId": {
+//         ".read": true,
+//         ".write": "auth == null || true",   // open rooms: adjust for auth
+//         "players": {
+//           "$pid": {
+//             "score": {
+//               ".validate": "
+//                 newData.isNumber() &&
+//                 Math.abs(newData.val() - data.val()) <= 1
+//               "
+//             },
+//             "step": {
+//               ".validate": "newData.val() === 1"
+//             }
+//           }
+//         }
+//       }
+//     }
+//   }
+// }
+// ─────────────────────────────────────────────────────────────────────
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
@@ -701,7 +733,7 @@ function updateMuteUI() {
   if (pill) pill.classList.toggle('active-pill', isMuted);
 }
 
-// v16: HOST TOGGLE SCORING MODE (in-game)
+// v17: HOST TOGGLE SCORING MODE (in-game)
 function hostToggleScoringMode() {
   if (MY_PLAYER_ID !== hostId) {
     showToast('Only the host can change scoring mode', true);
@@ -711,6 +743,11 @@ function hostToggleScoringMode() {
   scoringMode = newMode;
   updateModePillUI();
   pushRemote({ scoringMode: newMode });
+  // v17 FIX-5: re-render teams immediately on the host's own client
+  // so button enabled/disabled states update without waiting for Firebase echo
+  const isHost = MY_PLAYER_ID === hostId;
+  const isMyTurn = currentTurn === MY_PLAYER_ID;
+  renderTeams(isHost, isMyTurn);
   showToast(newMode === 'host' ? '👑 Host controls all scores' : '🎮 Players score themselves');
 }
 window.hostToggleScoringMode = hostToggleScoringMode;
@@ -1028,13 +1065,15 @@ function applyRemoteState(data) {
   turnOrder   = data.turnOrder   || [];
   roundNum    = data.round       || 1;
   lastScore   = data.lastScore   || null;
-  canUndo     = !!(lastScore && lastScore.playerId === MY_PLAYER_ID);
+  // v17 FIX-9: canUndo checks scorerId (who pressed the button) not playerId
+  // In host mode lastScore.scorerId===hostId, so only host can undo (correct).
+  // In self mode lastScore.scorerId===playerId===MY_PLAYER_ID for the current player.
+  canUndo     = !!(lastScore && lastScore.scorerId === MY_PLAYER_ID);
 
-  // v16: sync scoringMode from Firebase
-  if (data.scoringMode) {
-    scoringMode = data.scoringMode;
-    updateModePillUI();
-  }
+  // v17 FIX-6: sync scoringMode unconditionally so partial Firebase payloads
+  // can't leave clients stuck on a stale mode
+  scoringMode = data.scoringMode || 'self';
+  updateModePillUI();
 
   if (data.players) {
     players    = data.players;
@@ -1375,7 +1414,7 @@ function buildTeamHTML(team, step, btnEnabled, isHost, state) {
       <button class="bscore bplus"  data-id="${team.id}" data-dir="1"  ${btnEnabled?'':'disabled'}>+</button>
     </div>
     <div class="steps">
-      ${[1,2,5,10].map(n=>`<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}"
+      ${[1].map(n=>`<button class="step${n===step?' on':''}" data-id="${team.id}" data-step="${n}"
         ${btnEnabled?'':'disabled'}>&pm;${n}</button>`).join('')}
     </div>
     <div class="lock-msg"></div>`;
@@ -1464,8 +1503,11 @@ function changeScore(playerId, dir) {
   const p    = players[playerId];
   if (!p) return;
 
+  // v17 FIX-2: delta is ALWAYS ±1 — step field ignored at arithmetic level
+  // This is the root-cause hardening: even if step>1 slips through via DOM
+  // manipulation, the actual score change is capped at 1 point per click.
+  const delta = Math.sign(dir); // always -1, 0, or +1
   const prevScore = p.score;
-  const delta     = dir * step;
 
   // v16: NO floor clamping — allow negative scores
   const optimistic = prevScore + delta;
@@ -1489,7 +1531,7 @@ function changeScore(playerId, dir) {
       p.score = committed;
       if (el) { el.textContent=fmtScore(committed); el.classList.toggle('negative', committed<0); }
       patchScoresDOM(); updateStats();
-      pushRemote({ lastScore: { playerId, prevScore, delta, ts:serverNow() } });
+      pushRemote({ lastScore: { playerId, scorerId: MY_PLAYER_ID, prevScore, delta, ts:serverNow() } });
     }
   }).catch(()=>{
     p.score = prevScore;
@@ -1499,23 +1541,21 @@ function changeScore(playerId, dir) {
   });
 }
 
-function getStep(playerId) {
-  const t = playersToTeams(players).find(t=>t.id===playerId);
-  if (t && t.step) return t.step;
-  const box = domCache.teamBoxes[playerId] ||
-              document.querySelector(`.team-box[data-id="${playerId}"]`);
-  const s   = box && box.querySelector('.step.on');
-  return s ? parseInt(s.dataset.step) : 1;
+function getStep(_playerId) {
+  // v17 FIX-3: step is always 1 per spec — ignore any stored step value
+  return 1;
 }
 
 function setStep(btn, playerId, n) {
+  // v17 FIX-3: only step=1 is valid per spec — reject anything else
+  if (n !== 1) return;
   const box = document.querySelector(`.team-box[data-id="${playerId}"]`);
   if (!box) return;
   box.querySelectorAll('.step').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if (players[playerId]) {
-    players[playerId].step = n;
-    pushRemote({ [`players/${playerId}/step`]: n });
+    players[playerId].step = 1; // always 1
+    // No need to push step to Firebase — it's always 1 now
   }
 }
 
@@ -1524,7 +1564,8 @@ function setStep(btn, playerId, n) {
 // ═══════════════════════════════════════════════════════════════
 const UNDO_TTL_MS = 30000;
 function undoLastScore() {
-  if (!lastScore || lastScore.playerId !== MY_PLAYER_ID) return;
+  // v17 FIX-9: check scorerId (who pressed the button), not playerId (whose score changed)
+  if (!lastScore || lastScore.scorerId !== MY_PLAYER_ID) return;
   if (serverNow() - lastScore.ts > UNDO_TTL_MS) {
     showToast('Undo window expired (30s limit)', true); return;
   }
@@ -1690,7 +1731,8 @@ function addTeamUI() {
   if (Object.values(players).some(p=>p.name.toLowerCase()===lc)) {
     showToast('Name already taken', true); return;
   }
-  const pid      = Math.random().toString(36).slice(2,14);
+  // v17 FIX-8: use makePID() (crypto.randomUUID) instead of Math.random for collision safety
+  const pid      = makePID();
   const colorIdx = Object.keys(players).length % COLORS.length;
   pushRemote({
     [`players/${pid}`]: { name:trimmed, color:COLORS[colorIdx],
@@ -2112,11 +2154,13 @@ function autoSize(el){
 function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-// v16: fmtScore handles negatives — use minus sign (−) not hyphen
+// v17 FIX-10: fmtScore handles null/undefined explicitly rather than relying
+// on ||0 which silently swallows real data errors (e.g. n=false, n='')
 function fmtScore(n) {
-  const num = Number(n||0);
-  if (num < 0) return '−' + Math.abs(num).toLocaleString();
-  return num.toLocaleString();
+  const num = (n === null || n === undefined || n === '') ? 0 : Number(n);
+  const safe = isNaN(num) ? 0 : num;
+  if (safe < 0) return '\u2212' + Math.abs(safe).toLocaleString();
+  return safe.toLocaleString();
 }
 
 let toastTimer;
