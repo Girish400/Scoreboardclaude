@@ -4,7 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Score Board Live</title>
-<!-- v15: Bug fixes for TC#11,#14,#16,#20,#24,#27,#30,#34 -->
+<!--
+  v16 Changes:
+  1. Negative scores allowed — floor removed everywhere (TC#14 updated: floor only if mode requires)
+  2. Mute/unmute button — persisted in Firebase + localStorage
+  3. Score permission mode — "host" or "self" — host sets in lobby, persisted
+  4. Add Team hidden once game starts (gameState !== 'lobby')
+  5. Timer panel moved below teams-grid
+  + Full dual-persona review fixes (Frontend Dev + Backend Architect)
+-->
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -22,7 +30,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(245,200,66,.07),transparent 70%);pointer-events:none;z-index:0;}
 .wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:24px 16px 80px;}
 
-/* ── MODALS (shared base) ───────────────────────────── */
+/* ── MODALS ─────────────────────────────────────────── */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:2000;opacity:0;pointer-events:none;transition:opacity .3s;}
 .modal-bg.show{opacity:1;pointer-events:all;}
 .modal{background:var(--surface);border:1px solid var(--border2);border-radius:24px;padding:36px 32px;text-align:center;max-width:380px;width:92%;}
@@ -31,7 +39,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .modal-close{background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:10px 28px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.9rem;transition:all .2s;}
 .modal-close:hover{background:var(--red);border-color:var(--red);}
 
-/* ── LANDING SCREEN ─────────────────────────────────── */
+/* ── LANDING ─────────────────────────────────────────── */
 #landing-screen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:3000;padding:20px;}
 #landing-screen.hide{display:none;}
 .landing-card{background:var(--surface);border:1px solid var(--border2);border-radius:28px;padding:44px 36px 36px;text-align:center;max-width:420px;width:100%;}
@@ -44,8 +52,9 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .btn-join-land:hover{border-color:var(--blue);color:var(--blue);}
 .landing-divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.78rem;margin:4px 0;}
 .landing-divider::before,.landing-divider::after{content:'';flex:1;height:1px;background:var(--border);}
-/* ── HOST SETUP MODAL ───────────────────────────────── */
-#host-modal .modal{max-width:440px;text-align:left;}
+
+/* ── HOST SETUP MODAL ────────────────────────────────── */
+#host-modal .modal{max-width:460px;text-align:left;}
 #host-modal .modal h2{text-align:center;}
 #host-modal .modal p{text-align:center;}
 .setup-field-group{margin-bottom:14px;}
@@ -54,12 +63,19 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .setup-field:focus{border-color:var(--gold);}
 .setup-field.err{border-color:var(--red);}
 .field-err{color:var(--red);font-size:.78rem;min-height:16px;margin-top:4px;}
+/* Score mode toggle */
+.score-mode-group{margin-bottom:14px;}
+.score-mode-group label{display:block;font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px;}
+.score-mode-opts{display:flex;gap:8px;}
+.score-mode-btn{flex:1;padding:10px 8px;background:var(--surface2);border:2px solid var(--border2);color:var(--muted);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .2s;text-align:center;}
+.score-mode-btn.on{background:rgba(245,200,66,.12);border-color:var(--gold);color:var(--gold);}
 .btn-modal-submit{width:100%;padding:14px;background:var(--gold);color:#000;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;transition:filter .2s;margin-top:8px;touch-action:manipulation;}
 .btn-modal-submit:hover{filter:brightness(1.1);}
 .btn-modal-submit:disabled{opacity:.5;cursor:not-allowed;}
 .btn-modal-back{background:none;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:.85rem;cursor:pointer;padding:10px;margin-top:4px;width:100%;transition:color .2s;touch-action:manipulation;}
 .btn-modal-back:hover{color:var(--text);}
-/* ── JOIN MODAL (player) ────────────────────────────── */
+
+/* ── JOIN MODAL ──────────────────────────────────────── */
 #join-modal .modal{max-width:440px;text-align:left;}
 #join-modal .modal h2{text-align:center;}
 #join-modal .modal p{text-align:center;}
@@ -69,19 +85,17 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .btn-join{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;transition:filter .2s;margin-top:8px;touch-action:manipulation;}
 .btn-join:hover{filter:brightness(1.1);}
 .btn-join:disabled{opacity:.5;cursor:not-allowed;}
-/* room code display in lobby */
 .room-code-big{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:6px;color:var(--gold);background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.25);border-radius:12px;padding:8px 20px;display:inline-block;margin:4px 0 2px;cursor:pointer;transition:background .2s;touch-action:manipulation;}
 .room-code-big:hover{background:rgba(245,200,66,.15);}
 .copy-hint{font-size:.72rem;color:var(--muted);margin-bottom:16px;}
 
-/* ── LOBBY VIEW ─────────────────────────────────────── */
+/* ── LOBBY VIEW ──────────────────────────────────────── */
 #lobby-view{display:none;}
 #lobby-view.view-visible,#game-view.view-visible,#finished-view.view-visible{display:block !important;}
 .lobby-header{text-align:center;margin-bottom:32px;}
 .lobby-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.8rem,9vw,5rem);letter-spacing:5px;color:var(--gold);text-shadow:0 0 40px rgba(245,200,66,.3);}
 .lobby-sub{color:var(--muted);font-size:.9rem;margin-top:6px;}
 .lobby-room{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 20px;margin-top:14px;font-size:.8rem;color:var(--muted);}
-.lobby-room code{color:var(--gold);font-size:.9rem;letter-spacing:2px;}
 .section-label{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:2px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
 .section-label::after{content:'';flex:1;height:1px;background:var(--border);}
 .players-list{display:flex;flex-direction:column;gap:8px;margin-bottom:28px;}
@@ -93,6 +107,8 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .player-badge{font-size:.7rem;padding:3px 10px;border-radius:50px;background:var(--surface2);border:1px solid var(--border2);color:var(--muted);white-space:nowrap;}
 .player-badge.host-badge{background:rgba(167,139,250,.15);border-color:var(--purple);color:var(--purple);}
 .player-badge.you-badge{background:rgba(245,200,66,.12);border-color:var(--gold);color:var(--gold);}
+/* Score mode badge in lobby */
+.mode-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:50px;font-size:.78rem;font-weight:600;background:rgba(79,142,247,.12);border:1px solid var(--blue);color:var(--blue);margin-bottom:16px;}
 .lobby-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:28px;}
 .btn-lobby{padding:12px 24px;border:none;border-radius:50px;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:8px;}
 .btn-lobby:hover{transform:translateY(-2px);filter:brightness(1.12);}
@@ -103,7 +119,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .waiting-msg{text-align:center;color:var(--muted);font-size:.9rem;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;}
 .waiting-msg span{display:block;font-size:1.4rem;margin-bottom:6px;}
 
-/* ── GAME VIEW ──────────────────────────────────────── */
+/* ── GAME VIEW ───────────────────────────────────────── */
 #game-view{display:none;}
 .header{text-align:center;margin-bottom:24px;}
 .title-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;}
@@ -113,7 +129,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .meta{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:6px;}
 .meta span{display:flex;align-items:center;gap:5px;}
 
-/* ── STATE BADGE ────────────────────────────────────── */
+/* ── STATE BADGE ─────────────────────────────────────── */
 .state-bar{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
 .state-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:50px;font-size:.8rem;font-weight:700;letter-spacing:.5px;}
 .state-badge.lobby{background:rgba(79,142,247,.15);border:1px solid var(--blue);color:var(--blue);}
@@ -122,8 +138,12 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .state-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.4s infinite;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .state-badge.finished .state-dot{animation:none;}
+/* v16: mute + mode pill in state bar */
+.ctrl-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:50px;font-size:.78rem;font-weight:600;background:var(--surface);border:1px solid var(--border2);color:var(--muted);cursor:pointer;transition:all .2s;white-space:nowrap;}
+.ctrl-pill:hover{border-color:var(--gold);color:var(--gold);}
+.ctrl-pill.active-pill{background:rgba(245,200,66,.1);border-color:var(--gold);color:var(--gold);}
 
-/* ── TURN BANNER ────────────────────────────────────── */
+/* ── TURN BANNER ─────────────────────────────────────── */
 .turn-banner{border-radius:14px;padding:14px 20px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
 .turn-banner.your-turn{background:rgba(52,217,123,.12);border:1.5px solid var(--green);}
 .turn-banner.other-turn{background:var(--surface);border:1px solid var(--border);}
@@ -140,22 +160,65 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .btn-end-game{background:var(--red);color:#fff;}
 .btn-new-game-sm{background:var(--gold);color:#000;}
 
-/* ── CONNECTION ─────────────────────────────────────── */
+/* ── CONNECTION ──────────────────────────────────────── */
 .conn-bar{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:6px 16px;margin:0 auto 18px;width:fit-content;font-size:.78rem;color:var(--muted);}
 .conn-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .4s;}
 .conn-dot.online{background:var(--green);}
 .conn-dot.offline{background:var(--red);}
 
-/* ── TIMER ──────────────────────────────────────────── */
+/* ── TEAMS GRID ──────────────────────────────────────── */
+#teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:16px;margin-bottom:20px;}
+.team-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px 16px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;transition:border-color .3s,box-shadow .3s,transform .2s;}
+.team-box:hover{transform:translateY(-2px);}
+.team-box.leader{border-color:var(--gold);box-shadow:0 0 50px rgba(245,200,66,.15),inset 0 0 30px rgba(245,200,66,.04);}
+.team-box.my-turn-box{border-color:var(--green);box-shadow:0 0 30px rgba(52,217,123,.12);}
+.leader-crown{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.66rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:3px 13px;border-radius:50px;white-space:nowrap;opacity:0;transition:opacity .3s;}
+.team-box.leader .leader-crown{opacity:1;}
+.color-strip{position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--r) var(--r) 0 0;}
+.rm-team{position:absolute;top:12px;right:12px;background:none;border:1px solid var(--border2);color:var(--muted);width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:.85rem;transition:all .2s;display:flex;align-items:center;justify-content:center;}
+.rm-team:hover{background:var(--red);border-color:var(--red);color:#fff;}
+.team-name-disp{font-weight:700;font-size:1.15rem;text-align:center;max-width:90%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);}
+.team-name-inp{background:transparent;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.1rem;text-align:center;width:86%;outline:none;padding-bottom:4px;transition:border-color .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.team-name-inp:focus{border-bottom-color:var(--gold);}
+.team-name-inp:disabled{opacity:.6;cursor:not-allowed;}
+.ctrls{display:flex;align-items:center;justify-content:space-between;width:100%;}
+/* v16: negative scores — allow any number, no clamping */
+.score-num{font-family:'Bebas Neue',sans-serif;font-size:5rem;line-height:1;color:var(--text);flex:1;text-align:center;}
+.score-num.negative{color:var(--red);}
+.score-num.pop{animation:sPop .18s ease-out;}
+@keyframes sPop{0%{transform:scale(1.3)}100%{transform:scale(1)}}
+.bscore{width:60px;height:60px;border-radius:50%;border:none;font-size:1.7rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .2s,opacity .2s;}
+.bscore:active{transform:scale(.86);}
+.bscore:disabled{opacity:.25;cursor:not-allowed;transform:none;}
+.bminus{background:rgba(240,80,77,.12);color:var(--red);border:1.5px solid var(--red);}
+.bminus:hover:not(:disabled){background:var(--red);color:#fff;}
+.bplus{background:rgba(52,217,123,.12);color:var(--green);border:1.5px solid var(--green);}
+.bplus:hover:not(:disabled){background:var(--green);color:#000;}
+.steps{display:flex;gap:5px;justify-content:center;}
+.step{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.72rem;padding:3px 9px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.step:hover,.step.on{background:var(--gold);color:#000;border-color:var(--gold);}
+.step:disabled{opacity:.3;cursor:not-allowed;}
+.lock-msg{font-size:.72rem;color:var(--muted);text-align:center;min-height:16px;}
+.lock-msg.your{color:var(--green);font-weight:600;}
+
+/* ── ACTION BAR ──────────────────────────────────────── */
+.action-bar{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-bottom:22px;}
+.btn-a{padding:11px 20px;border:none;border-radius:50px;cursor:pointer;font-size:.88rem;font-weight:600;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;transition:all .2s;}
+.btn-a:hover{transform:translateY(-2px);filter:brightness(1.12);}
+.btn-a:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none;}
+.b-add{background:var(--gold);color:#000;}
+.b-save{background:var(--green);color:#000;}
+.b-reset{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
+.b-qr{background:var(--blue);color:#fff;}
+
+/* ── TIMER (v16: moved below teams-grid) ─────────────── */
 .timer-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
 .timer-display{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:5px;color:var(--text);min-width:100px;transition:color .3s;}
 .timer-display.warn{color:var(--orange);}
 .timer-display.danger{color:var(--red);animation:blink .5s infinite alternate;}
 @keyframes blink{from{opacity:1}to{opacity:.3}}
-/* F-4: shake feedback when disabled buttons tapped on mobile */
 @keyframes shakeOnce{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .step:disabled:active,.bscore:disabled:active{animation:shakeOnce .25s ease-out;}
-/* F-2: timer panel responsive layout */
 @media(max-width:560px){
   .timer-panel{flex-wrap:wrap;}
   .t-presets{order:2;width:100%;}
@@ -175,56 +238,13 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .t-hide{margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);padding:5px 13px;border-radius:50px;font-size:.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;}
 .t-hide:hover{border-color:var(--gold);color:var(--gold);}
 
-/* ── TEAMS GRID ─────────────────────────────────────── */
-#teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:16px;margin-bottom:20px;}
-.team-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px 16px 18px;display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;transition:border-color .3s,box-shadow .3s,transform .2s;}
-.team-box:hover{transform:translateY(-2px);}
-.team-box.leader{border-color:var(--gold);box-shadow:0 0 50px rgba(245,200,66,.15),inset 0 0 30px rgba(245,200,66,.04);}
-.team-box.my-turn-box{border-color:var(--green);box-shadow:0 0 30px rgba(52,217,123,.12);}
-.leader-crown{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:.66rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:3px 13px;border-radius:50px;white-space:nowrap;opacity:0;transition:opacity .3s;}
-.team-box.leader .leader-crown{opacity:1;}
-.color-strip{position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--r) var(--r) 0 0;}
-.rm-team{position:absolute;top:12px;right:12px;background:none;border:1px solid var(--border2);color:var(--muted);width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:.85rem;transition:all .2s;display:flex;align-items:center;justify-content:center;}
-.rm-team:hover{background:var(--red);border-color:var(--red);color:#fff;}
-.team-name-disp{font-weight:700;font-size:1.15rem;text-align:center;max-width:90%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);}
-.team-name-inp{background:transparent;border:none;border-bottom:2px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.1rem;text-align:center;width:86%;outline:none;padding-bottom:4px;transition:border-color .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.team-name-inp:focus{border-bottom-color:var(--gold);}
-.team-name-inp:disabled{opacity:.6;cursor:not-allowed;}
-.ctrls{display:flex;align-items:center;justify-content:space-between;width:100%;}
-.score-num{font-family:'Bebas Neue',sans-serif;font-size:5rem;line-height:1;color:var(--text);flex:1;text-align:center;}
-.score-num.pop{animation:sPop .18s ease-out;}
-@keyframes sPop{0%{transform:scale(1.3)}100%{transform:scale(1)}}
-.bscore{width:60px;height:60px;border-radius:50%;border:none;font-size:1.7rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s,background .2s,opacity .2s;}
-.bscore:active{transform:scale(.86);}
-.bscore:disabled{opacity:.25;cursor:not-allowed;transform:none;}
-.bminus{background:rgba(240,80,77,.12);color:var(--red);border:1.5px solid var(--red);}
-.bminus:hover:not(:disabled){background:var(--red);color:#fff;}
-.bplus{background:rgba(52,217,123,.12);color:var(--green);border:1.5px solid var(--green);}
-.bplus:hover:not(:disabled){background:var(--green);color:#000;}
-.steps{display:flex;gap:5px;justify-content:center;}
-.step{background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:.72rem;padding:3px 9px;border-radius:50px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
-.step:hover,.step.on{background:var(--gold);color:#000;border-color:var(--gold);}
-.step:disabled{opacity:.3;cursor:not-allowed;}
-.lock-msg{font-size:.72rem;color:var(--muted);text-align:center;min-height:16px;}
-.lock-msg.your{color:var(--green);font-weight:600;}
-
-/* ── ACTION BAR ─────────────────────────────────────── */
-.action-bar{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-bottom:22px;}
-.btn-a{padding:11px 20px;border:none;border-radius:50px;cursor:pointer;font-size:.88rem;font-weight:600;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;transition:all .2s;}
-.btn-a:hover{transform:translateY(-2px);filter:brightness(1.12);}
-.btn-a:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none;}
-.b-add{background:var(--gold);color:#000;}
-.b-save{background:var(--green);color:#000;}
-.b-reset{background:var(--surface2);color:var(--text);border:1px solid var(--border2);}
-.b-qr{background:var(--blue);color:#fff;}
-
-/* ── STATS ──────────────────────────────────────────── */
+/* ── STATS ───────────────────────────────────────────── */
 .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(140px,45%),1fr));gap:10px;margin-bottom:22px;}
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;}
 .stat-l{font-size:.66rem;text-transform:uppercase;letter-spacing:1.8px;color:var(--muted);margin-bottom:4px;}
 .stat-v{font-family:'Bebas Neue',sans-serif;font-size:clamp(1.2rem,4vw,1.7rem);letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
-/* ── HISTORY ────────────────────────────────────────── */
+/* ── HISTORY ─────────────────────────────────────────── */
 .section-hd{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:2px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
 .section-hd::after{content:'';flex:1;height:1px;background:var(--border);}
 .hist-list{display:flex;flex-direction:column;gap:9px;}
@@ -241,7 +261,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .hist-del:hover{color:var(--red);}
 .empty{color:var(--muted);text-align:center;padding:26px;font-size:.84rem;}
 
-/* ── FINISHED VIEW ──────────────────────────────────── */
+/* ── FINISHED VIEW ───────────────────────────────────── */
 #finished-view{display:none;}
 .podium{display:flex;flex-direction:column;gap:12px;margin:20px 0 32px;}
 .podium-card{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;transition:border-color .3s;}
@@ -257,40 +277,37 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .podium-score{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;color:var(--text);}
 .finished-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:28px;}
 
-/* ── QR MODAL ───────────────────────────────────────── */
+/* ── QR MODAL ────────────────────────────────────────── */
 #qr-modal .modal{max-width:340px;}
 #qr-modal h2{font-size:1.8rem;}
 #qr-box{display:flex;justify-content:center;margin-bottom:16px;}
 #qr-box canvas,#qr-box img{border-radius:12px;}
 .qr-url{font-size:.7rem;color:var(--muted);word-break:break-all;margin-bottom:16px;padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);}
 
-/* ── COUNTDOWN OVERLAY ──────────────────────────────── */
+/* ── COUNTDOWN OVERLAY ───────────────────────────────── */
 .cdown{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:3000;opacity:0;pointer-events:none;transition:opacity .25s;}
 .cdown.show{opacity:1;pointer-events:all;}
 .cdown-num{font-family:'Bebas Neue',sans-serif;font-size:clamp(4rem,22vmin,18rem);color:var(--gold);}
 @keyframes cPop{0%{transform:scale(2);opacity:0}25%{transform:scale(1);opacity:1}75%{transform:scale(1);opacity:1}100%{transform:scale(.5);opacity:0}}
 
-/* ── TOAST / ERROR ──────────────────────────────────── */
+/* ── TOAST / ERROR ───────────────────────────────────── */
 .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(90px);background:var(--green);color:#000;font-weight:700;padding:10px 22px;border-radius:50px;font-size:.86rem;z-index:4000;transition:transform .3s;pointer-events:none;max-width:90vw;text-align:center;}
 .toast.show{transform:translateX(-50%) translateY(0);}
 .toast.err{background:var(--red);color:#fff;}
 .err-banner{background:rgba(240,80,77,.15);border:1px solid var(--red);border-radius:12px;padding:12px 16px;margin-bottom:18px;font-size:.83rem;color:#f9b0af;display:none;}
 .err-banner.show{display:block;}
 
-/* ── TOUCH OPTIMIZATION (F-10) ──────────────────────── */
-.bscore,.step,.btn-turn,.btn-lobby,.btn-a,.t-pre,.tico,.t-hide,.btn-join,.modal-close,.hist-restore,.rm-team{touch-action:manipulation;}
+/* ── TOUCH OPTIMIZATION ──────────────────────────────── */
+.bscore,.step,.btn-turn,.btn-lobby,.btn-a,.t-pre,.tico,.t-hide,.btn-join,.modal-close,.hist-restore,.rm-team,.ctrl-pill,.score-mode-btn{touch-action:manipulation;}
 
 @media(max-width:480px){
   .timer-panel{flex-direction:column;align-items:flex-start;}
   .t-hide{margin-left:0;}
   .turn-banner{flex-direction:column;align-items:flex-start;}
-  /* F-3: stack turn-action buttons in a 2-col grid on mobile */
   .turn-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;}
   .btn-end-turn{grid-column:1/-1;}
-  /* F-1: bigger tap targets for score controls on single-col layout */
   .bscore{width:52px;height:52px;font-size:1.5rem;}
   .score-num{font-size:4rem;}
-  /* F-6: full-width lobby action buttons */
   .lobby-actions{flex-direction:column;align-items:stretch;}
   .btn-lobby{justify-content:center;}
 }
@@ -301,7 +318,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 <!-- ── COUNTDOWN OVERLAY ───────────────────────── -->
 <div class="cdown" id="cdown"><div class="cdown-num" id="cdown-num">3</div></div>
 
-<!-- ── LANDING SCREEN ────────────────────────── -->
+<!-- ── LANDING SCREEN ─────────────────────────── -->
 <div id="landing-screen">
   <div class="landing-card">
     <div class="landing-logo">🏆 ScoreBoard</div>
@@ -314,7 +331,7 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
   </div>
 </div>
 
-<!-- ── HOST SETUP MODAL ────────────────────── -->
+<!-- ── HOST SETUP MODAL ──────────────────────── -->
 <div class="modal-bg" id="host-modal">
   <div class="modal">
     <h2>👑 Create Game</h2>
@@ -327,6 +344,14 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
     <div class="setup-field-group">
       <label>Game title <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
       <input class="setup-field" id="host-game-title" type="text" placeholder="e.g. Quiz Night" maxlength="40" autocomplete="off" value="Score Board">
+    </div>
+    <!-- v16: Score permission setting -->
+    <div class="score-mode-group">
+      <label>Who can change scores?</label>
+      <div class="score-mode-opts">
+        <button class="score-mode-btn on" id="mode-btn-self" onclick="selectScoreMode('self',this)">🎮 Each Player<br><span style="font-size:.72rem;font-weight:400;opacity:.7">scores themselves</span></button>
+        <button class="score-mode-btn" id="mode-btn-host" onclick="selectScoreMode('host',this)">👑 Host Only<br><span style="font-size:.72rem;font-weight:400;opacity:.7">host controls all</span></button>
+      </div>
     </div>
     <button class="btn-modal-submit" id="btn-host-create">Create Room →</button>
     <button class="btn-modal-back" id="btn-host-back">← Back</button>
@@ -388,6 +413,11 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
       <span id="conn-text-lobby">Connecting…</span>
     </div>
 
+    <!-- v16: score mode badge visible in lobby -->
+    <div style="text-align:center;margin-bottom:16px;">
+      <div class="mode-badge" id="lobby-mode-badge">🎮 Each player scores themselves</div>
+    </div>
+
     <div class="section-label">Players in lobby</div>
     <div class="players-list" id="players-list"></div>
 
@@ -406,6 +436,9 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 
   <!-- ═══════════════════════════════════════════
        GAME VIEW
+       v16 layout order: header → state bar → turn banner
+                         → teams-grid → action-bar → timer
+                         → stats → history
   ═══════════════════════════════════════════ -->
   <div id="game-view">
     <div class="header">
@@ -430,6 +463,14 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
         <div class="conn-dot" id="conn-dot"></div>
         <span id="conn-text">Connecting…</span>
       </div>
+      <!-- v16: mute pill -->
+      <div class="ctrl-pill" id="mute-pill" onclick="toggleMute()" title="Toggle sound">
+        <span id="mute-icon">🔊</span><span id="mute-label">Sound On</span>
+      </div>
+      <!-- v16: score mode pill (host can tap to toggle) -->
+      <div class="ctrl-pill" id="mode-pill" onclick="hostToggleScoringMode()" title="Toggle who can score">
+        <span id="mode-icon">🎮</span><span id="mode-label">Self Score</span>
+      </div>
     </div>
 
     <!-- Turn banner -->
@@ -438,7 +479,18 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
       <div class="turn-actions" id="turn-actions"></div>
     </div>
 
-    <!-- Timer -->
+    <!-- Teams grid (v16: timer is BELOW this) -->
+    <div id="teams-grid"></div>
+
+    <!-- Action bar (v16: Add Team hidden when game active) -->
+    <div class="action-bar" id="action-bar">
+      <button class="btn-a b-add"  id="btn-add"   onclick="addTeamUI()">+ Add Team</button>
+      <button class="btn-a b-save" id="btn-save"  onclick="saveGame()">💾 Save Game</button>
+      <button class="btn-a b-reset" id="btn-reset" onclick="resetAll()">↺ Reset Scores</button>
+      <button class="btn-a b-qr"               onclick="openQR()">📱 Share QR</button>
+    </div>
+
+    <!-- Timer panel (v16: BELOW action-bar / teams-grid) -->
     <div class="timer-panel" id="timer-panel">
       <div class="timer-display" id="timer-disp">00:00</div>
       <div class="t-presets">
@@ -458,15 +510,6 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
       <button class="tico t-pause" id="t-pause" onclick="pauseTimer()" title="Pause" style="display:none">⏸</button>
       <button class="tico t-rst"               onclick="resetTimer()"  title="Reset">↺</button>
       <button class="t-hide" onclick="toggleTimer()">Hide Timer</button>
-    </div>
-
-    <div id="teams-grid"></div>
-
-    <div class="action-bar" id="action-bar">
-      <button class="btn-a b-add"  id="btn-add"   onclick="addTeamUI()">+ Add Team</button>
-      <button class="btn-a b-save" id="btn-save"  onclick="saveGame()">💾 Save Game</button>
-      <button class="btn-a b-reset" id="btn-reset" onclick="resetAll()">↺ Reset Scores</button>
-      <button class="btn-a b-qr"               onclick="openQR()">📱 Share QR</button>
     </div>
 
     <div class="stats" id="stats"></div>
@@ -504,21 +547,15 @@ const firebaseConfig = { databaseURL: 'https://scoreboard-1677c-default-rtdb.fir
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-// Get room ID from URL hash only -- do NOT auto-generate at load time.
-// The host generates a new ID when they click "Create Room".
 function getExistingRoomId() {
-  // Normalise to lowercase — some apps/browsers uppercase URL fragments
   const h = location.hash.replace('#','').trim().toLowerCase();
   if (h && /^[a-z0-9]{6,16}$/.test(h)) return h;
   return null;
 }
-const ROOM_ID = getExistingRoomId(); // null on fresh visit, string if arrived via link
+const ROOM_ID = getExistingRoomId();
 const ROOT    = ROOM_ID ? 'rooms/' + ROOM_ID : null;
 
-// ── Per-session identity ──────────────────────────────────────
-// CLIENT_ID: unique per-session identifier
 const CLIENT_ID  = Math.random().toString(36).slice(2);
-
 const LS_KEY        = ROOM_ID ? 'sb_' + ROOM_ID : null;
 const PLAYER_ID_KEY = ROOM_ID ? 'sb_pid_' + ROOM_ID : null;
 let MY_PLAYER_ID    = PLAYER_ID_KEY ? (localStorage.getItem(PLAYER_ID_KEY) || null) : null;
@@ -527,22 +564,31 @@ let serverOffset = 0;
 function serverNow() { return Date.now() + serverOffset; }
 
 // ═══════════════════════════════════════════════════════════════
-// GAME STATE  (mirrors Firebase)
+// GAME STATE
 // ═══════════════════════════════════════════════════════════════
 const COLORS = ['#f5c842','#34d97b','#f07844','#4f8ef7','#a78bfa','#f0504d','#22d3ee','#ec4899'];
-let gameState     = 'lobby';   // "lobby" | "active" | "finished"
+let gameState     = 'lobby';
 let hostId        = null;
-let currentTurn   = null;      // playerId whose turn it is
+let currentTurn   = null;
 let turnIndex     = 0;
-let turnOrder     = [];        // [playerId, ...]
-let players       = {};        // {playerId: {name,color,score,joinedAt,turnSubmitted}}
+let turnOrder     = [];
+let players       = {};
 let gameHistory   = [];
 let roundNum      = 1;
-let lastScore     = null;      // {playerId, prevScore, delta} — for undo
+let lastScore     = null;
 let canUndo       = false;
 
-let localTeams    = [];        // kept for backward-compat rendering; derived from players
+let localTeams    = [];
 let teamCtr       = 0;
+
+// v16: NEW state fields
+// scoringMode: 'self' = each player scores themselves | 'host' = host scores all
+let scoringMode   = 'self';
+// isMuted: local only (not synced — each device controls their own sound)
+let isMuted       = false;
+
+// v16: host-modal score mode selection (before room creation)
+let pendingScoreMode = 'self';
 
 // Timer
 let timerSecs         = 60;
@@ -559,6 +605,15 @@ let lastSyncedSeconds = -1;
 let qrGenerated = false;
 
 // ═══════════════════════════════════════════════════════════════
+// v16: SCORE MODE MODAL SELECTOR (pre-room-create)
+// ═══════════════════════════════════════════════════════════════
+window.selectScoreMode = function(mode, btn) {
+  pendingScoreMode = mode;
+  document.querySelectorAll('.score-mode-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+};
+
+// ═══════════════════════════════════════════════════════════════
 // AUDIO
 // ═══════════════════════════════════════════════════════════════
 let audioCtx = null;
@@ -567,6 +622,7 @@ function getAudioCtx() {
   return audioCtx;
 }
 function withAudio(fn) {
+  if (isMuted) return; // v16: respect mute
   try {
     const ctx = getAudioCtx();
     if (ctx.state==='suspended') ctx.resume().then(()=>{ try{fn(ctx);}catch(e){} }).catch(()=>{});
@@ -625,31 +681,87 @@ function playCelebrate() {
   });
 }
 
+// v16: MUTE TOGGLE
+function toggleMute() {
+  isMuted = !isMuted;
+  updateMuteUI();
+  // Persist to localStorage per device
+  try { localStorage.setItem('sb_muted', isMuted ? '1' : '0'); } catch(e){}
+  showToast(isMuted ? '🔇 Sound muted' : '🔊 Sound on');
+}
+window.toggleMute = toggleMute;
+
+function updateMuteUI() {
+  const pill  = document.getElementById('mute-pill');
+  const icon  = document.getElementById('mute-icon');
+  const label = document.getElementById('mute-label');
+  if (!icon) return;
+  icon.textContent  = isMuted ? '🔇' : '🔊';
+  label.textContent = isMuted ? 'Muted' : 'Sound On';
+  if (pill) pill.classList.toggle('active-pill', isMuted);
+}
+
+// v16: HOST TOGGLE SCORING MODE (in-game)
+function hostToggleScoringMode() {
+  if (MY_PLAYER_ID !== hostId) {
+    showToast('Only the host can change scoring mode', true);
+    return;
+  }
+  const newMode = scoringMode === 'self' ? 'host' : 'self';
+  scoringMode = newMode;
+  updateModePillUI();
+  pushRemote({ scoringMode: newMode });
+  showToast(newMode === 'host' ? '👑 Host controls all scores' : '🎮 Players score themselves');
+}
+window.hostToggleScoringMode = hostToggleScoringMode;
+
+function updateModePillUI() {
+  const pill  = document.getElementById('mode-pill');
+  const icon  = document.getElementById('mode-icon');
+  const label = document.getElementById('mode-label');
+  if (!icon) return;
+  const isHost = MY_PLAYER_ID === hostId;
+  icon.textContent  = scoringMode === 'host' ? '👑' : '🎮';
+  label.textContent = scoringMode === 'host' ? 'Host Scores' : 'Self Score';
+  if (pill) {
+    pill.classList.toggle('active-pill', scoringMode === 'host');
+    pill.style.cursor = isHost ? 'pointer' : 'default';
+    pill.title = isHost ? 'Click to toggle scoring mode' : (scoringMode === 'host' ? 'Host controls scoring' : 'Each player scores themselves');
+  }
+  // Update lobby badge
+  const lbadge = document.getElementById('lobby-mode-badge');
+  if (lbadge) {
+    lbadge.textContent = scoringMode === 'host'
+      ? '👑 Host controls all scores'
+      : '🎮 Each player scores themselves';
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 updateClock();
-setInterval(updateClock,1000);
+setInterval(updateClock, 1000);
 renderTimerDisplay(timerSecs);
 autoSize(document.getElementById('game-title'));
-// Room code display updated later by setupFirebase() once room is established
+// Restore mute preference per device
+try {
+  const m = localStorage.getItem('sb_muted');
+  if (m === '1') { isMuted = true; updateMuteUI(); }
+} catch(e){}
 document.body.addEventListener('touchstart',()=>{
   if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
 },{once:true});
 
-// ── Determine entry flow ──────────────────────────────────
-// ROOM_ID is null on fresh visits. Only non-null if arrived via shared link.
+// Entry flow
 if (MY_PLAYER_ID && ROOM_ID) {
-  // Returning player to a known room -- reconnect directly
   hideLanding();
-  loadLocalState(ROOM_ID); // show cached state while Firebase connects
+  loadLocalState(ROOM_ID);
   setupFirebase();
 } else if (ROOM_ID && !MY_PLAYER_ID) {
-  // Arrived via shared link -- pre-fill code in join modal
   hideLanding();
   showJoinModal(ROOM_ID);
 } else {
-  // Fresh visit (no hash) -- show landing screen
   setupLanding();
 }
 
@@ -662,22 +774,20 @@ function makePID() {
 function hideLanding() {
   document.getElementById('landing-screen').classList.add('hide');
 }
-function showModal(id) {
-  document.getElementById(id).classList.add('show');
-}
-function hideModal(id) {
-  document.getElementById(id).classList.remove('show');
-}
+function showModal(id)  { document.getElementById(id).classList.add('show'); }
+function hideModal(id)  { document.getElementById(id).classList.remove('show'); }
 
 // ── Copy room code ────────────────────────────────────────────
 function copyRoomCode() {
+  const AR = window._ACTIVE_ROOT || ROOT;
+  const roomId = AR ? AR.replace('rooms/','') : ROOM_ID;
   const url = location.protocol !== 'file:'
-    ? location.origin + location.pathname + '#' + ROOM_ID
-    : ROOM_ID;
+    ? location.origin + location.pathname + '#' + roomId
+    : roomId;
   if (navigator.clipboard) {
     navigator.clipboard.writeText(url).then(()=>showToast('Link copied! 📋'));
   } else {
-    showToast('Room code: ' + ROOM_ID.toUpperCase());
+    showToast('Room code: ' + (roomId||'').toUpperCase());
   }
 }
 window.copyRoomCode = copyRoomCode;
@@ -705,7 +815,6 @@ document.getElementById('btn-host-back').addEventListener('click', () => {
   hideModal('host-modal');
   document.getElementById('landing-screen').classList.remove('hide');
 });
-
 document.getElementById('btn-host-create').addEventListener('click', attemptHostCreate);
 document.getElementById('host-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') attemptHostCreate();
@@ -721,29 +830,26 @@ function attemptHostCreate() {
 
   nameErr.textContent = '';
   nameEl.classList.remove('err');
-
-  if (!name) { nameEl.classList.add('err'); nameErr.textContent = 'Enter your name.'; return; }
+  if (!name)           { nameEl.classList.add('err'); nameErr.textContent = 'Enter your name.'; return; }
   if (name.length < 2) { nameEl.classList.add('err'); nameErr.textContent = 'At least 2 characters.'; return; }
-  if (name.length > 30) { nameEl.classList.add('err'); nameErr.textContent = 'Max 30 characters.'; return; }
+  if (name.length > 30){ nameEl.classList.add('err'); nameErr.textContent = 'Max 30 characters.'; return; }
 
   btn.disabled = true;
   btn.textContent = 'Creating...';
 
-  // Generate fresh room ID HERE (not at page load) so the landing screen always shows
   const newRoomId = Math.random().toString(36).slice(2, 10);
   const hostRoot  = 'rooms/' + newRoomId;
   const pidKey    = 'sb_pid_' + newRoomId;
 
   MY_PLAYER_ID = makePID();
   localStorage.setItem(pidKey, MY_PLAYER_ID);
-
-  // Update URL hash so share link and page refresh work
   window.history.replaceState(null, '', '#' + newRoomId);
 
   const pid = MY_PLAYER_ID;
   const roomData = {
     state: 'lobby', hostId: pid, title, round: 1,
     currentTurn: null, turnIndex: 0, turnOrder: [],
+    scoringMode: pendingScoreMode,  // v16
     players: { [pid]: { name, color: COLORS[0], score: 0,
                          joinedAt: serverNow(), turnSubmitted: false, isHost: true } },
     history: {}, lastScore: null,
@@ -751,15 +857,9 @@ function attemptHostCreate() {
              startedAt: null, remainingMs: 60000, pausedAt: null }
   };
 
-  // Use get() to check for collision, then update() to write.
-  // Avoids the Firebase RTDB runTransaction null-first-call problem
-  // which would silently abort and show a blank page.
   get(ref(db, hostRoot))
     .then(snap => {
-      if (snap.exists() && snap.val() && snap.val().state) {
-        // Room ID collision — generate a new one and retry
-        throw new Error('COLLISION');
-      }
+      if (snap.exists() && snap.val() && snap.val().state) throw new Error('COLLISION');
       return update(ref(db, hostRoot), roomData);
     })
     .then(() => {
@@ -768,11 +868,11 @@ function attemptHostCreate() {
       hideModal('host-modal');
       document.getElementById('game-title').value = title;
       autoSize(document.getElementById('game-title'));
-      // Show lobby immediately without waiting for Firebase onValue
-      gameState  = 'lobby';
-      hostId     = pid;
-      players    = roomData.players;
-      localTeams = playersToTeams(players);
+      gameState    = 'lobby';
+      hostId       = pid;
+      scoringMode  = pendingScoreMode; // v16
+      players      = roomData.players;
+      localTeams   = playersToTeams(players);
       renderView(true);
       setupFirebase(hostRoot);
       showToast('Room created! Share the code. 🎉');
@@ -783,22 +883,19 @@ function attemptHostCreate() {
       MY_PLAYER_ID = null;
       localStorage.removeItem(pidKey);
       window.history.replaceState(null, '', location.pathname);
-      if (err.message === 'COLLISION') {
-        nameErr.textContent = 'Room ID conflict — please try again.';
-      } else {
-        nameErr.textContent = 'Connection error — check your internet and try again.';
-      }
+      nameErr.textContent = err.message === 'COLLISION'
+        ? 'Room ID conflict — please try again.'
+        : 'Connection error — check your internet and try again.';
     });
 }
 
 // ═══════════════════════════════════════════════════════════════
-// JOIN MODAL  (players joining an existing room)
+// JOIN MODAL
 // ═══════════════════════════════════════════════════════════════
 function showJoinModal(prefilledCode) {
   showModal('join-modal');
   const codeEl = document.getElementById('join-code');
   if (prefilledCode) {
-    // Store as lowercase internally; CSS text-transform:uppercase handles display
     codeEl.value = prefilledCode.toLowerCase();
     requestAnimationFrame(()=>requestAnimationFrame(()=>
       document.getElementById('join-name').focus()));
@@ -811,11 +908,8 @@ document.getElementById('btn-join-back').addEventListener('click', () => {
   hideModal('join-modal');
   document.getElementById('landing-screen').classList.remove('hide');
 });
-
 document.getElementById('btn-join-ok').addEventListener('click', attemptJoin);
-document.getElementById('join-name').addEventListener('keydown', e => {
-  if (e.key === 'Enter') attemptJoin();
-});
+document.getElementById('join-name').addEventListener('keydown', e => { if (e.key==='Enter') attemptJoin(); });
 document.getElementById('join-code').addEventListener('input', e => {
   e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]/g,'');
 });
@@ -826,160 +920,97 @@ function attemptJoin() {
   const nameEl    = document.getElementById('join-name');
   const nameErrEl = document.getElementById('join-err');
   const btn       = document.getElementById('btn-join-ok');
-
-  // Always normalise to lowercase — the input may display uppercase via CSS
   const code = codeEl.value.trim().toLowerCase();
   const name = nameEl.value.trim();
-  let valid  = true;
+  let valid = true;
+  codeErrEl.textContent=''; codeEl.classList.remove('err');
+  nameErrEl.textContent=''; nameEl.classList.remove('err');
 
-  codeErrEl.textContent = ''; codeEl.classList.remove('err');
-  nameErrEl.textContent = ''; nameEl.classList.remove('err');
-
-  if (!code || !/^[a-z0-9]{6,16}$/.test(code)) {
-    codeEl.classList.add('err');
-    codeErrEl.textContent = 'Enter a valid room code (6–16 characters).';
-    valid = false;
+  if (!code||!/^[a-z0-9]{6,16}$/.test(code)) {
+    codeEl.classList.add('err'); codeErrEl.textContent='Enter a valid room code (6–16 characters).'; valid=false;
   }
   if (!name) {
-    nameEl.classList.add('err');
-    nameErrEl.textContent = 'Enter your name.';
-    valid = false;
-  } else if (name.length < 2) {
-    nameEl.classList.add('err');
-    nameErrEl.textContent = 'At least 2 characters.';
-    valid = false;
-  } else if (name.length > 30) {
-    nameEl.classList.add('err');
-    nameErrEl.textContent = 'Max 30 characters.';
-    valid = false;
+    nameEl.classList.add('err'); nameErrEl.textContent='Enter your name.'; valid=false;
+  } else if (name.length<2) {
+    nameEl.classList.add('err'); nameErrEl.textContent='At least 2 characters.'; valid=false;
+  } else if (name.length>30) {
+    nameEl.classList.add('err'); nameErrEl.textContent='Max 30 characters.'; valid=false;
   }
   if (!valid) return;
 
-  btn.disabled = true;
-  btn.textContent = 'Joining…';
-
+  btn.disabled=true; btn.textContent='Joining…';
   const joinRoot   = 'rooms/' + code;
   const joinPidKey = 'sb_pid_' + code;
 
-  // ── Use get() to READ the room first, then write the player ──
-  // WHY: Firebase RTDB runTransaction() always calls its update fn
-  // with null on the first invocation for a client that has never
-  // cached that path. `if (!cur) return` aborts immediately → 
-  // committed=false → "Room not found" even when the room exists.
-  // get() does a direct one-time read and never has this null issue.
   get(ref(db, joinRoot))
     .then(snap => {
       const roomData = snap.val();
-
-      // ── Validate room ──
       if (!roomData) {
-        btn.disabled = false;
-        btn.textContent = 'Join Game →';
-        codeEl.classList.add('err');
-        codeErrEl.textContent = 'Room not found. Check the code and try again.';
-        return;
+        btn.disabled=false; btn.textContent='Join Game →';
+        codeEl.classList.add('err'); codeErrEl.textContent='Room not found. Check the code and try again.'; return;
       }
       if (roomData.state !== 'lobby') {
-        btn.disabled = false;
-        btn.textContent = 'Join Game →';
-        codeEl.classList.add('err');
-        codeErrEl.textContent = 'Game already started — cannot join now.';
-        return;
+        btn.disabled=false; btn.textContent='Join Game →';
+        codeEl.classList.add('err'); codeErrEl.textContent='Game already started — cannot join now.'; return;
       }
-      const existingNames = Object.values(roomData.players || {}).map(p => p.name.toLowerCase());
+      const existingNames = Object.values(roomData.players||{}).map(p=>p.name.toLowerCase());
       if (existingNames.includes(name.toLowerCase())) {
-        btn.disabled = false;
-        btn.textContent = 'Join Game →';
-        nameEl.classList.add('err');
-        nameErrEl.textContent = 'That name is taken. Choose another.';
-        return;
+        btn.disabled=false; btn.textContent='Join Game →';
+        nameEl.classList.add('err'); nameErrEl.textContent='That name is taken. Choose another.'; return;
       }
-
-      // ── Write the new player with a targeted update() ──
-      // Player IDs are random UUIDs — concurrent joins won't collide.
       const pid      = makePID();
-      const colorIdx = Object.keys(roomData.players || {}).length % COLORS.length;
-      const newPlayer = {
-        name, color: COLORS[colorIdx], score: 0,
-        joinedAt: serverNow(), turnSubmitted: false
-      };
-
+      const colorIdx = Object.keys(roomData.players||{}).length % COLORS.length;
+      const newPlayer = { name, color: COLORS[colorIdx], score:0, joinedAt:serverNow(), turnSubmitted:false };
       MY_PLAYER_ID = pid;
       localStorage.setItem(joinPidKey, pid);
-
-      return update(ref(db, joinRoot + '/players'), { [pid]: newPlayer })
-        .then(() => {
-          // Read the room again to get full fresh state for immediate render
-          return get(ref(db, joinRoot));
-        })
+      return update(ref(db, joinRoot+'/players'), {[pid]:newPlayer})
+        .then(()=> get(ref(db, joinRoot)))
         .then(freshSnap => {
-          btn.disabled = false;
-          btn.textContent = 'Join Game →';
-
+          btn.disabled=false; btn.textContent='Join Game →';
           const freshData = freshSnap.val();
-          window.history.replaceState(null, '', '#' + code);
+          window.history.replaceState(null,'','#'+code);
           hideModal('join-modal');
-
-          // Render lobby immediately from fresh data
-          gameState  = 'lobby';
-          hostId     = freshData ? (freshData.hostId || null) : null;
-          players    = freshData ? (freshData.players || {}) : {};
-          localTeams = playersToTeams(players);
+          gameState    = 'lobby';
+          hostId       = freshData ? (freshData.hostId||null) : null;
+          scoringMode  = freshData ? (freshData.scoringMode||'self') : 'self'; // v16
+          players      = freshData ? (freshData.players||{}) : {};
+          localTeams   = playersToTeams(players);
           renderView(true);
-
-          setupFirebaseWithRoot(joinRoot);
+          setupFirebase(joinRoot);
           showToast('Joined! Waiting for host to start 🎮');
         });
     })
     .catch(err => {
-      btn.disabled = false;
-      btn.textContent = 'Join Game →';
-      codeErrEl.textContent = 'Connection error — try again.';
-      MY_PLAYER_ID = null;
-      localStorage.removeItem(joinPidKey);
-      console.error('Join error:', err);
+      btn.disabled=false; btn.textContent='Join Game →';
+      document.getElementById('join-code-err').textContent='Connection error — try again.';
+      MY_PLAYER_ID=null; localStorage.removeItem(joinPidKey);
     });
 }
 
 // ═══════════════════════════════════════════════════════════════
 // FIREBASE
 // ═══════════════════════════════════════════════════════════════
-// setupFirebaseWithRoot allows the join flow to point to a different room
-function setupFirebaseWithRoot(customRoot) {
-  // Reassign ROOT to the joined room path
-  // (ROOT is const at module level so we use a local override via closure)
-  setupFirebase(customRoot);
-}
-
 function setupFirebase(overrideRoot) {
   const ACTIVE_ROOT = overrideRoot || ROOT;
   onValue(ref(db,'.info/serverTimeOffset'), s=>{ serverOffset=s.val()||0; });
 
   function updateConn(on) {
     ['conn-dot','conn-dot-lobby'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(el) el.className='conn-dot '+(on?'online':'offline');
+      const el=document.getElementById(id); if(el) el.className='conn-dot '+(on?'online':'offline');
     });
     ['conn-text','conn-text-lobby'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(el) el.textContent = on ? 'Connected' : 'Offline — reconnecting…';
+      const el=document.getElementById(id); if(el) el.textContent=on?'Connected':'Offline — reconnecting…';
     });
   }
   onValue(ref(db,'.info/connected'), s=>updateConn(!!s.val()));
 
-  // Store ACTIVE_ROOT globally so pushRemote and all transactions use the right path
   window._ACTIVE_ROOT = ACTIVE_ROOT;
-  // Update room code display
   const _codeDisp = document.getElementById('lobby-room-code');
   if (_codeDisp) _codeDisp.textContent = ACTIVE_ROOT.replace('rooms/','').toUpperCase();
 
   onValue(ref(db, ACTIVE_ROOT), snap=>{
     const data = snap.val();
     if (!data) return;
-
-    // No echo suppression — always apply remote state.
-    // Firebase RTDB is the single source of truth; local state is updated
-    // optimistically and the onValue callback reconciles it.
     applyRemoteState(data);
   }, err=>showError('Firebase error: '+err.message));
 }
@@ -999,54 +1030,57 @@ function applyRemoteState(data) {
   lastScore   = data.lastScore   || null;
   canUndo     = !!(lastScore && lastScore.playerId === MY_PLAYER_ID);
 
-  // Players object
-  if (data.players) {
-    players = data.players;
-    // Build localTeams from players for backward-compat rendering
-    localTeams = playersToTeams(players);
-    teamCtr = Math.max(teamCtr, ...localTeams.map(t=>t.id||0));
+  // v16: sync scoringMode from Firebase
+  if (data.scoringMode) {
+    scoringMode = data.scoringMode;
+    updateModePillUI();
   }
 
-  // Title
+  if (data.players) {
+    players    = data.players;
+    localTeams = playersToTeams(players);
+    // FE-BUG FIX: teamCtr only used for legacy compat — safe to skip for UUID-keyed players
+    // Math.max with string UUIDs returns NaN; guard it
+    const numericIds = localTeams.map(t=>Number(t.id)||0).filter(n=>n>0);
+    if (numericIds.length) teamCtr = Math.max(teamCtr, ...numericIds);
+  }
+
   if (data.title !== undefined) {
     const el = document.getElementById('game-title');
-    if (el.value !== data.title) { el.value=data.title; autoSize(el); }
+    if (el && el.value !== data.title) { el.value=data.title; autoSize(el); }
   }
 
-  // History — B-4 FIX: handle push-keyed objects sorted by savedAt descending
   if (data.history) {
     const raw = data.history;
     const entries = Array.isArray(raw) ? raw : Object.values(raw);
     gameHistory = entries
       .filter(Boolean)
-      .sort((a,b) => (b.savedAt||b.id||0) - (a.savedAt||a.id||0))
-      .slice(0, 60);
+      .sort((a,b)=>(b.savedAt||b.id||0)-(a.savedAt||a.id||0))
+      .slice(0,60);
   }
 
-  // Timer
   if (data.timer) syncTimerFromRemote(data.timer);
 
-  // Round display
-  document.getElementById('round-disp').textContent = '🎮 Round '+roundNum;
+  const rdEl = document.getElementById('round-disp');
+  if (rdEl) rdEl.textContent = '🎮 Round '+roundNum;
 
-  // Render the correct view
   renderView(prevState !== gameState);
   saveLocal();
 }
 
-// Convert players map → sorted teams array (by joinedAt for stable tie-breaking)
+// Convert players map → sorted teams array
 function playersToTeams(pmap) {
   return Object.entries(pmap||{})
     .map(([pid,p])=>({
-      id: pid,        // use playerId as id
+      id: pid,
       name: p.name,
-      score: p.score||0,
+      score: typeof p.score === 'number' ? p.score : 0, // v16: allow any number including negative
       color: p.color||COLORS[0],
       joinedAt: p.joinedAt||0,
       turnSubmitted: p.turnSubmitted||false,
       step: p.step||1
     }))
-    .sort((a,b)=>a.joinedAt-b.joinedAt); // stable tie-breaking: earlier join ranks higher
+    .sort((a,b)=>a.joinedAt-b.joinedAt);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1054,7 +1088,6 @@ function playersToTeams(pmap) {
 // ═══════════════════════════════════════════════════════════════
 function renderView(stateChanged) {
   const isHost = MY_PLAYER_ID === hostId;
-
   if (gameState === 'lobby') {
     show('lobby-view'); hide('game-view'); hide('finished-view');
     renderLobby(isHost);
@@ -1068,41 +1101,41 @@ function renderView(stateChanged) {
   }
 }
 
-function show(id){
-  const el=document.getElementById(id);
-  if(!el) return;
-  el.style.display='block';
-  el.classList.add('view-visible');
+function show(id) {
+  const el=document.getElementById(id); if(!el) return;
+  el.style.display='block'; el.classList.add('view-visible');
 }
-function hide(id){
-  const el=document.getElementById(id);
-  if(!el) return;
-  el.style.display='none';
-  el.classList.remove('view-visible');
+function hide(id) {
+  const el=document.getElementById(id); if(!el) return;
+  el.style.display='none'; el.classList.remove('view-visible');
 }
 
 // ═══════════════════════════════════════════════════════════════
 // LOBBY RENDER
 // ═══════════════════════════════════════════════════════════════
 function renderLobby(isHost) {
-  // Update lobby title from game data
   const AR = window._ACTIVE_ROOT || ROOT || 'rooms/unknown';
   const titleDisp = document.getElementById('lobby-title-disp');
   const subDisp   = document.getElementById('lobby-sub-disp');
   const codeDisp  = document.getElementById('lobby-room-code');
   const roomCode  = AR.replace('rooms/','');
   if (titleDisp) titleDisp.textContent = document.getElementById('game-title').value || 'Score Board Live';
-  if (subDisp)   subDisp.textContent   = isHost ? 'Share the room code — waiting for players to join…' : 'Waiting for the host to start the game…';
+  if (subDisp)   subDisp.textContent   = isHost
+    ? 'Share the room code — waiting for players to join…'
+    : 'Waiting for the host to start the game…';
   if (codeDisp)  codeDisp.textContent  = roomCode.toUpperCase();
+
+  // v16: update mode badge
+  updateModePillUI();
 
   const list = document.getElementById('players-list');
   list.innerHTML = '';
   Object.entries(players).sort((a,b)=>a[1].joinedAt-b[1].joinedAt).forEach(([pid,p])=>{
-    const isMe   = pid === MY_PLAYER_ID;
-    const isH    = pid === hostId;
-    const div    = document.createElement('div');
-    div.className= 'player-row'+(isMe?' you':'')+(isH?' host-row':'');
-    div.innerHTML= `
+    const isMe = pid===MY_PLAYER_ID;
+    const isH  = pid===hostId;
+    const div  = document.createElement('div');
+    div.className = 'player-row'+(isMe?' you':'')+(isH?' host-row':'');
+    div.innerHTML = `
       <div class="player-avatar" style="background:${p.color}20;color:${p.color}">
         ${esc(p.name.charAt(0).toUpperCase())}
       </div>
@@ -1114,8 +1147,6 @@ function renderLobby(isHost) {
   });
 
   const count = Object.keys(players).length;
-
-  // Start button — host only, need ≥2 players
   const btnStart = document.getElementById('btn-start-game');
   const btnNew   = document.getElementById('btn-new-lobby');
   const waitMsg  = document.getElementById('waiting-msg');
@@ -1138,17 +1169,16 @@ function renderLobby(isHost) {
 // ═══════════════════════════════════════════════════════════════
 function renderGame(isHost) {
   const isMyTurn = currentTurn === MY_PLAYER_ID;
-  const curPlayer= players[currentTurn];
+  const curPlayer = players[currentTurn];
 
-  // State badge
   document.getElementById('state-label').textContent = 'Active';
   const badge = document.getElementById('state-badge');
   badge.className = 'state-badge active';
 
   // Turn banner
-  const banner  = document.getElementById('turn-banner');
-  const whoEl   = document.getElementById('turn-who');
-  const actEl   = document.getElementById('turn-actions');
+  const banner = document.getElementById('turn-banner');
+  const whoEl  = document.getElementById('turn-who');
+  const actEl  = document.getElementById('turn-actions');
 
   if (isMyTurn) {
     banner.className = 'turn-banner your-turn';
@@ -1167,48 +1197,67 @@ function renderGame(isHost) {
       : '';
   }
 
-  // Host title-editing control
+  // Host editing controls
   const editIco = document.getElementById('edit-ico');
   const titleEl = document.getElementById('game-title');
   if (editIco) editIco.style.display = isHost ? '' : 'none';
   if (titleEl) titleEl.disabled = !isHost;
 
-  // Action bar buttons — host-only in active state
-  document.getElementById('btn-add').disabled   = !isHost;
+  // v16: Add Team button — HIDDEN once game has started (req #4)
+  const btnAdd = document.getElementById('btn-add');
+  if (btnAdd) btnAdd.style.display = 'none'; // hidden during active game
+
+  // Other action bar buttons
   document.getElementById('btn-reset').disabled = !isHost;
   document.getElementById('btn-save').disabled  = false;
 
-  // Teams grid
+  // v16: update mode pill
+  updateModePillUI();
+  updateMuteUI();
+
   renderTeams(isHost, isMyTurn);
   updateStats();
   renderHistory(document.getElementById('hist-list'));
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TEAMS GRID  (DOM diffing, state-aware)
+// TEAMS GRID
 // ═══════════════════════════════════════════════════════════════
 const domCache = { scoreEls:{}, teamBoxes:{} };
 
 function renderTeams(isHost, isMyTurn) {
-  const grid     = document.getElementById('teams-grid');
-  const sorted   = getSortedPlayers();
-  const maxScore = sorted.length ? Math.max(...sorted.map(t=>t.score)) : 0;
+  const grid   = document.getElementById('teams-grid');
+  const sorted = getSortedPlayers();
+
+  // v16: leader is highest score — if all tied or all zero, no crown
+  // ALSO: negative scores supported — leader is still highest (even if negative)
+  const maxScore = sorted.length ? Math.max(...sorted.map(t=>t.score)) : null;
+  const hasUniqueLeader = sorted.length > 0
+    && sorted.filter(t=>t.score===maxScore).length === 1;
 
   // Remove stale boxes
   grid.querySelectorAll('.team-box').forEach(box=>{
     if(!sorted.find(t=>String(t.id)===box.dataset.id)) box.remove();
   });
 
-  sorted.forEach((team, idx)=>{
+  sorted.forEach((team)=>{
     const isThisPlayersTurn = team.id === currentTurn;
-    const isLead = team.score===maxScore &&
-                   sorted.filter(t=>t.score===maxScore).length===1 && maxScore>0;
-    const canScore = gameState==='active' && isMyTurn && isThisPlayersTurn;
-    // In active mode: only current-turn player's card has enabled buttons
-    // (score buttons for all teams are enabled for that player — they score themselves)
-    // Actually: the current player scores THEIR OWN card only
-    const myOwnCard = team.id === MY_PLAYER_ID;
-    const btnEnabled = gameState==='active' && isMyTurn && myOwnCard;
+    const isLead = hasUniqueLeader && team.score === maxScore;
+
+    // v16: scoring permission logic
+    // scoringMode === 'self': only the current-turn player can score their own card
+    // scoringMode === 'host': only the host can score any card
+    let btnEnabled = false;
+    if (gameState === 'active') {
+      if (scoringMode === 'self') {
+        // Original: current player scores their own card only
+        btnEnabled = isMyTurn && team.id === MY_PLAYER_ID;
+      } else {
+        // host mode: host can score any card at any time
+        btnEnabled = isHost;
+      }
+    }
+
     const step = team.step || 1;
 
     let box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
@@ -1218,34 +1267,52 @@ function renderTeams(isHost, isMyTurn) {
       box.innerHTML = buildTeamHTML(team, step, btnEnabled, isHost, gameState);
       grid.appendChild(box);
     } else {
-      // Patch
+      // Patch existing box
       const ni = box.querySelector('.team-name-inp');
       if (ni && document.activeElement!==ni && ni.value!==team.name) ni.value=team.name;
       if (ni) ni.disabled = gameState!=='lobby' && !isHost;
+
       const si = box.querySelector('.score-num');
-      if (si && si.textContent.replace(/,/g,'') != team.score) si.textContent=fmtScore(team.score);
+      if (si) {
+        const rendered = si.textContent.replace(/,/g,'').replace(/\u2212/g,'-');
+        if (rendered != String(team.score)) si.textContent = fmtScore(team.score);
+        // v16: negative score color
+        si.classList.toggle('negative', team.score < 0);
+      }
+
       box.querySelectorAll('.step').forEach(b=>{
         b.classList.toggle('on', parseInt(b.dataset.step)===step);
         b.disabled = !btnEnabled;
       });
+
       const bm = box.querySelector('.bminus');
       const bp = box.querySelector('.bplus');
-      if (bm) bm.disabled = !btnEnabled || (btnEnabled && team.score <= 0);
+      // v16: bminus is NEVER disabled due to score value — negatives allowed
+      if (bm) bm.disabled = !btnEnabled;
       if (bp) bp.disabled = !btnEnabled;
-      // Lock message
+
       const lk = box.querySelector('.lock-msg');
       if (lk) {
         if (gameState==='active') {
-          if (isThisPlayersTurn && isMyTurn && myOwnCard) {
-            lk.className='lock-msg your'; lk.textContent='⚡ Your turn — score now!';
-          } else if (isThisPlayersTurn) {
-            lk.className='lock-msg'; lk.textContent='🎯 This player is scoring…';
+          if (scoringMode === 'host') {
+            if (isHost) {
+              lk.className='lock-msg your'; lk.textContent='👑 Host mode — you control this score';
+            } else {
+              lk.className='lock-msg'; lk.textContent='👑 Host is controlling scores';
+            }
           } else {
-            lk.className='lock-msg'; lk.textContent='🔒 Not this player\'s turn';
+            if (isThisPlayersTurn && isMyTurn && team.id===MY_PLAYER_ID) {
+              lk.className='lock-msg your'; lk.textContent='⚡ Your turn — score now!';
+            } else if (isThisPlayersTurn) {
+              lk.className='lock-msg'; lk.textContent='🎯 This player is scoring…';
+            } else {
+              lk.className='lock-msg'; lk.textContent='🔒 Not this player\'s turn';
+            }
           }
         } else { lk.textContent=''; }
       }
-      // Remove button — visible for host in lobby; disabled when at minimum players (2)
+
+      // Remove button
       const rm = box.querySelector('.rm-team');
       const atMinimum = Object.keys(players).length <= 2;
       if (rm) {
@@ -1255,7 +1322,6 @@ function renderTeams(isHost, isMyTurn) {
       }
     }
 
-    // Classes
     let cls = 'team-box';
     if (isLead) cls += ' leader';
     if (isThisPlayersTurn && gameState==='active') cls += ' my-turn-box';
@@ -1264,22 +1330,21 @@ function renderTeams(isHost, isMyTurn) {
     if (strip) strip.style.background = team.color;
   });
 
-  // Enforce order
+  // Enforce DOM order
   sorted.forEach((team,idx)=>{
     const box = grid.querySelector(`.team-box[data-id="${team.id}"]`);
     if (box && grid.children[idx]!==box) grid.insertBefore(box, grid.children[idx]||null);
   });
 
-  // Handlers once
+  // Event delegation — register once
   if (!grid._listenersOK) {
     grid._listenersOK = true;
     grid.addEventListener('click', e=>{
       const rm = e.target.closest('.rm-team');
       const bs = e.target.closest('.bscore');
       const st = e.target.closest('.step');
-      // F-4 FIX: show toast when disabled buttons are tapped (no cursor on touch)
-      if ((bs && bs.disabled) || (st && st.disabled)) {
-        showToast("Not your turn!", true); return;
+      if ((bs && bs.disabled)||(st && st.disabled)) {
+        showToast(scoringMode==='host' ? '👑 Only host can score' : 'Not your turn!', true); return;
       }
       if (rm) hostRemovePlayer(rm.dataset.id);
       if (bs) changeScore(bs.dataset.id, parseInt(bs.dataset.dir));
@@ -1296,6 +1361,7 @@ function renderTeams(isHost, isMyTurn) {
 
 function buildTeamHTML(team, step, btnEnabled, isHost, state) {
   const rmVisible = isHost && state==='lobby';
+  // v16: bminus no longer disabled based on score — negatives allowed
   return `
     <div class="leader-crown">🏆 Leading</div>
     <div class="color-strip" style="background:${team.color}"></div>
@@ -1304,8 +1370,8 @@ function buildTeamHTML(team, step, btnEnabled, isHost, state) {
            data-id="${team.id}" placeholder="Name"
            ${(state!=='lobby'&&!isHost)?'disabled':''}>
     <div class="ctrls">
-      <button class="bscore bminus" data-id="${team.id}" data-dir="-1" ${(!btnEnabled||team.score<=0)?'disabled':''}>−</button>
-      <div class="score-num" id="sn-${team.id}">${fmtScore(team.score)}</div>
+      <button class="bscore bminus" data-id="${team.id}" data-dir="-1" ${btnEnabled?'':'disabled'}>−</button>
+      <div class="score-num${team.score<0?' negative':''}" id="sn-${team.id}">${fmtScore(team.score)}</div>
       <button class="bscore bplus"  data-id="${team.id}" data-dir="1"  ${btnEnabled?'':'disabled'}>+</button>
     </div>
     <div class="steps">
@@ -1317,15 +1383,19 @@ function buildTeamHTML(team, step, btnEnabled, isHost, state) {
 
 function patchScoresDOM() {
   const sorted   = getSortedPlayers();
-  const maxScore = sorted.length ? Math.max(...sorted.map(t=>t.score)) : 0;
+  // v16: no clamping — allow negative scores in max calc
+  const maxScore = sorted.length ? Math.max(...sorted.map(t=>t.score)) : null;
+  const hasUniqueLeader = sorted.length > 0 && sorted.filter(t=>t.score===maxScore).length===1;
   sorted.forEach(t=>{
     const el  = domCache.scoreEls[t.id]  || document.getElementById('sn-'+t.id);
-    const box = domCache.teamBoxes[t.id] ||
-                document.querySelector(`.team-box[data-id="${t.id}"]`);
-    if (el && el.textContent.replace(/,/g,'') != t.score) el.textContent=fmtScore(t.score);
+    const box = domCache.teamBoxes[t.id] || document.querySelector(`.team-box[data-id="${t.id}"]`);
+    if (el) {
+      const rendered = el.textContent.replace(/,/g,'').replace(/\u2212/g,'-');
+      if (rendered != String(t.score)) el.textContent=fmtScore(t.score);
+      el.classList.toggle('negative', t.score < 0);
+    }
     if (box) {
-      const lead = t.score===maxScore &&
-                   sorted.filter(x=>x.score===maxScore).length===1 && maxScore>0;
+      const lead = hasUniqueLeader && t.score===maxScore;
       box.classList.toggle('leader', lead);
     }
   });
@@ -1340,6 +1410,7 @@ function rebuildDomCache(sorted) {
 }
 
 // Sort players by score desc, tie-break by joinedAt asc
+// v16: works correctly with negative scores — no Math.max clamping
 function getSortedPlayers() {
   return playersToTeams(players).sort((a,b)=>
     b.score!==a.score ? b.score-a.score : a.joinedAt-b.joinedAt
@@ -1360,26 +1431,33 @@ function renderFinished(isHost) {
         ${esc(t.name.charAt(0).toUpperCase())}
       </div>
       <div class="podium-name">${esc(t.name)}</div>
-      <div class="podium-score">${fmtScore(t.score)}</div>
+      <div class="podium-score" style="${t.score<0?'color:var(--red)':''}">${fmtScore(t.score)}</div>
     </div>`).join('');
-
   document.getElementById('finished-sub').textContent =
     sorted[0] ? `🏆 ${sorted[0].name} wins!` : 'Final Scores';
-
   const btnNew = document.getElementById('btn-new-finished');
   btnNew.style.display = isHost ? 'flex' : 'none';
-
   renderHistory(document.getElementById('hist-list-fin'));
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SCORE CHANGE  (only current-turn player, their own card)
+// SCORE CHANGE — v16: supports negative scores + host mode
 // ═══════════════════════════════════════════════════════════════
 function changeScore(playerId, dir) {
   if (gameState !== 'active') return;
-  if (playerId !== MY_PLAYER_ID) return;  // can only score yourself
-  if (currentTurn !== MY_PLAYER_ID) {
-    showToast("It's not your turn!", true); return;
+
+  // v16: permission check based on scoringMode
+  if (scoringMode === 'self') {
+    // Original logic: player can only score themselves on their turn
+    if (playerId !== MY_PLAYER_ID) return;
+    if (currentTurn !== MY_PLAYER_ID) {
+      showToast("It's not your turn!", true); return;
+    }
+  } else {
+    // host mode: only host, any card, any time
+    if (MY_PLAYER_ID !== hostId) {
+      showToast("Only the host can change scores", true); return;
+    }
   }
 
   const step = getStep(playerId);
@@ -1389,43 +1467,33 @@ function changeScore(playerId, dir) {
   const prevScore = p.score;
   const delta     = dir * step;
 
-  // Optimistic update
-  const optimistic = Math.max(0, prevScore + delta);
+  // v16: NO floor clamping — allow negative scores
+  const optimistic = prevScore + delta;
   p.score = optimistic;
   const el = domCache.scoreEls[playerId] || document.getElementById('sn-'+playerId);
   if (el) {
-    // F-9 FIX: use Web Animations API instead of forced-reflow offsetWidth trick
     el.textContent = fmtScore(optimistic);
+    el.classList.toggle('negative', optimistic < 0);
     el.animate([{transform:'scale(1.35)'},{transform:'scale(1)'}],{duration:180,easing:'ease-out'});
   }
-  // Update minus button disabled state based on new score
-  const box = domCache.teamBoxes[playerId] || document.querySelector(`.team-box[data-id="${playerId}"]`);
-  if (box) {
-    const bm = box.querySelector('.bminus');
-    if (bm) bm.disabled = optimistic <= 0;
-  }
+  // v16: bminus is never disabled by score value
   playDing(dir>0);
   patchScoresDOM(); updateStats();
 
-  // B-1 FIX: single atomic transaction — do NOT call pushRemote(score) again in .then()
-  // The transaction is the only write for the score. Metadata (lastScore) is a separate
-  // lightweight write that does not touch the score field.
+  // Firebase transaction — v16: NO Math.max clamping
   runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)+'/players/'+playerId+'/score'), cur=>{
-    // Apply delta from the current server value (cur), clamped to ≥0
-    return Math.max(0, (cur === null ? 0 : cur) + delta);
+    return (cur === null ? 0 : cur) + delta; // no floor
   }).then(result=>{
     if (result.committed && result.snapshot.exists()) {
       const committed = result.snapshot.val();
       p.score = committed;
-      if (el) el.textContent = fmtScore(committed);
+      if (el) { el.textContent=fmtScore(committed); el.classList.toggle('negative', committed<0); }
       patchScoresDOM(); updateStats();
-      // Write only undo metadata — NOT the score again
-      pushRemote({ lastScore: { playerId, prevScore, delta, ts: serverNow() } });
+      pushRemote({ lastScore: { playerId, prevScore, delta, ts:serverNow() } });
     }
   }).catch(()=>{
-    // On failure, revert optimistic update
     p.score = prevScore;
-    if (el) el.textContent = fmtScore(prevScore);
+    if (el) { el.textContent=fmtScore(prevScore); el.classList.toggle('negative', prevScore<0); }
     patchScoresDOM(); updateStats();
     showToast('Score update failed — try again', true);
   });
@@ -1452,24 +1520,20 @@ function setStep(btn, playerId, n) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// UNDO LAST SCORE
-// B-2 FIX: guard with 30s TTL + abort transaction if score changed concurrently
+// UNDO LAST SCORE — v16: no floor clamping
 // ═══════════════════════════════════════════════════════════════
-const UNDO_TTL_MS = 30000; // 30-second undo window
+const UNDO_TTL_MS = 30000;
 function undoLastScore() {
   if (!lastScore || lastScore.playerId !== MY_PLAYER_ID) return;
-  // TTL check — undo only valid within 30 seconds
   if (serverNow() - lastScore.ts > UNDO_TTL_MS) {
-    showToast('Undo window expired (30s limit)', true);
-    return;
+    showToast('Undo window expired (30s limit)', true); return;
   }
   const pid      = lastScore.playerId;
   const prev     = lastScore.prevScore;
-  const expected = prev + lastScore.delta; // what the score should be now if untouched
+  const expected = prev + lastScore.delta;
   runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)+'/players/'+pid+'/score'), cur => {
-    // Abort if the score has been changed by another operation since undo was requested
-    if (cur !== expected) return; // returning undefined aborts the transaction
-    return prev;
+    if (cur !== expected) return; // abort if changed
+    return prev; // v16: no clamping — prev could be negative
   }).then(result => {
     if (result.committed) {
       pushRemote({ [`players/${pid}/score`]: prev, lastScore: null });
@@ -1485,7 +1549,9 @@ window.undoLastScore = undoLastScore;
 // TURN MANAGEMENT
 // ═══════════════════════════════════════════════════════════════
 function endMyTurn() {
-  if (currentTurn !== MY_PLAYER_ID) return;
+  // v16: in host mode, host controls turns too
+  if (scoringMode === 'self' && currentTurn !== MY_PLAYER_ID) return;
+  if (scoringMode === 'host' && MY_PLAYER_ID !== hostId) return;
   advanceTurn();
 }
 window.endMyTurn = endMyTurn;
@@ -1498,14 +1564,11 @@ window.hostSkipTurn = hostSkipTurn;
 
 function advanceTurn() {
   if (!turnOrder.length) return;
-  // B-3 FIX: use a transaction to guard against simultaneous "Done" + host "Skip"
-  // Only advance if turnIndex still matches what this client expects
-  const expectedIndex = turnIndex;
+  const expectedIndex    = turnIndex;
   const submittingPlayer = currentTurn;
   runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)), cur => {
     if (!cur) return;
-    // Abort if another client already advanced the turn
-    if (cur.turnIndex !== expectedIndex) return;
+    if (cur.turnIndex !== expectedIndex) return; // abort — already advanced
     const nextIdx = (cur.turnIndex + 1) % (cur.turnOrder || []).length;
     const nextPid = cur.turnOrder[nextIdx];
     cur.turnIndex   = nextIdx;
@@ -1519,8 +1582,7 @@ function advanceTurn() {
     if (result.committed) {
       const data = result.snapshot.val();
       const nextName = data && data.players && data.currentTurn
-        ? (data.players[data.currentTurn]?.name || 'Next player')
-        : 'Next player';
+        ? (data.players[data.currentTurn]?.name || 'Next player') : 'Next player';
       showToast(`▶ ${nextName}'s turn`);
     }
   }).catch(()=>showToast('Turn advance failed', true));
@@ -1534,16 +1596,15 @@ function hostStartGame() {
   const pids = Object.keys(players).sort((a,b)=>players[a].joinedAt-players[b].joinedAt);
   if (pids.length < 2) { showToast('Need at least 2 players to start', true); return; }
   const order = [...pids];
-  // Update local state immediately — do NOT wait for Firebase echo
+  // Update local state immediately
   const prevState = gameState;
-  gameState    = 'active';
-  turnOrder    = order;
-  turnIndex    = 0;
-  currentTurn  = order[0];
-  lastScore    = null;
-  canUndo      = false;
+  gameState   = 'active';
+  turnOrder   = order;
+  turnIndex   = 0;
+  currentTurn = order[0];
+  lastScore   = null;
+  canUndo     = false;
   renderView(prevState !== gameState);
-  // Persist to Firebase so other clients update
   pushRemote({ state:'active', turnOrder:order, turnIndex:0, currentTurn:order[0], lastScore:null });
   showToast('Game started! ▶');
 }
@@ -1565,14 +1626,12 @@ window.hostEndGame = hostEndGame;
 function hostNewGame() {
   if (MY_PLAYER_ID !== hostId) return;
   if (!confirm('Start a new game? This will reset all scores and return to lobby.')) return;
-  // Reset scores, go back to lobby
   const resetPlayers = {};
   Object.entries(players).forEach(([pid,p])=>{
     resetPlayers[pid] = {...p, score:0, turnSubmitted:false};
   });
   stopLocalTick();
   roundNum++;
-  // Update local state immediately
   const _prevState = gameState;
   gameState   = 'lobby';
   currentTurn = null;
@@ -1582,10 +1641,9 @@ function hostNewGame() {
   localTeams  = playersToTeams(resetPlayers);
   renderView(_prevState !== gameState);
   pushRemote({
-    state: 'lobby', currentTurn:null, turnIndex:0, turnOrder:[],
-    round: roundNum, players: resetPlayers, lastScore:null,
-    timer:{ secs:60, durationMs:60000, running:false,
-            startedAt:null, remainingMs:60000, pausedAt:null }
+    state:'lobby', currentTurn:null, turnIndex:0, turnOrder:[],
+    round:roundNum, players:resetPlayers, lastScore:null,
+    timer:{secs:60,durationMs:60000,running:false,startedAt:null,remainingMs:60000,pausedAt:null}
   });
   showToast('New game — back to lobby!');
 }
@@ -1593,8 +1651,9 @@ window.hostNewGame = hostNewGame;
 
 function hostRemovePlayer(pid) {
   if (MY_PLAYER_ID !== hostId || gameState !== 'lobby') return;
-  if (pid === hostId) { showToast('Cannot remove the host',true); return; }
-  if (Object.keys(players).length <= 2) { showToast('Need at least 2 players — cannot remove',true); return; }
+  if (pid === hostId) { showToast('Cannot remove the host', true); return; }
+  // TC#11: guard at ≤ 2 total players
+  if (Object.keys(players).length <= 2) { showToast('Need at least 2 players — cannot remove', true); return; }
   if (!confirm(`Remove ${players[pid]?.name}?`)) return;
   const updated = {...players};
   delete updated[pid];
@@ -1605,34 +1664,31 @@ function hostRemovePlayer(pid) {
 // PLAYER NAME (lobby only)
 // ═══════════════════════════════════════════════════════════════
 function updatePlayerName(pid, val) {
-  if (gameState !== 'lobby') { showToast('Cannot rename after game starts',true); return; }
+  if (gameState !== 'lobby') { showToast('Cannot rename after game starts', true); return; }
   if (pid !== MY_PLAYER_ID && MY_PLAYER_ID !== hostId) return;
   const trimmed = val.replace(/<[^>]*>/g,'').trim();
-  if (!trimmed || trimmed.length < 2) { showToast('Name too short (min 2 chars)',true); return; }
-  if (trimmed.length > 30) { showToast('Name too long (max 30 chars)',true); return; }
-  // Duplicate check
-  const others = Object.entries(players)
-    .filter(([id])=>id!==pid)
-    .map(([,p])=>p.name.toLowerCase());
-  if (others.includes(trimmed.toLowerCase())) { showToast('That name is already taken',true); return; }
+  if (!trimmed || trimmed.length < 2) { showToast('Name too short (min 2 chars)', true); return; }
+  if (trimmed.length > 30) { showToast('Name too long (max 30 chars)', true); return; }
+  const others = Object.entries(players).filter(([id])=>id!==pid).map(([,p])=>p.name.toLowerCase());
+  if (others.includes(trimmed.toLowerCase())) { showToast('That name is already taken', true); return; }
   pushRemote({ [`players/${pid}/name`]: trimmed });
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ADD TEAM / RESET (host only)
+// ADD TEAM / RESET — v16: addTeamUI enforces lobby-only
 // ═══════════════════════════════════════════════════════════════
 function addTeamUI() {
   if (MY_PLAYER_ID !== hostId) return;
-  if (gameState !== 'lobby') { showToast('Cannot add players after game starts',true); return; }
-  // Opens a mini prompt — could be a modal but keep it simple
+  // v16: hard guard — game must be in lobby state to add players
+  if (gameState !== 'lobby') { showToast('Cannot add players after game starts', true); return; }
   const name = prompt('New player name:');
   if (!name) return;
   const trimmed = name.trim();
-  if (!trimmed || trimmed.length<2) { showToast('Name too short',true); return; }
-  if (trimmed.length>30) { showToast('Name too long',true); return; }
+  if (!trimmed || trimmed.length<2) { showToast('Name too short', true); return; }
+  if (trimmed.length>30) { showToast('Name too long', true); return; }
   const lc = trimmed.toLowerCase();
   if (Object.values(players).some(p=>p.name.toLowerCase()===lc)) {
-    showToast('Name already taken',true); return;
+    showToast('Name already taken', true); return;
   }
   const pid      = Math.random().toString(36).slice(2,14);
   const colorIdx = Object.keys(players).length % COLORS.length;
@@ -1651,7 +1707,8 @@ function resetAll() {
     resetPlayers[pid]={...p, score:0, turnSubmitted:false};
   });
   roundNum++;
-  document.getElementById('round-disp').textContent='🎮 Round '+roundNum;
+  const rdEl = document.getElementById('round-disp');
+  if (rdEl) rdEl.textContent='🎮 Round '+roundNum;
   pushRemote({ players:resetPlayers, round:roundNum, lastScore:null });
   showToast('Round '+roundNum+' begins! 🎮');
 }
@@ -1659,8 +1716,6 @@ window.resetAll = resetAll;
 
 // ═══════════════════════════════════════════════════════════════
 // SAVE GAME / HISTORY
-// B-4 FIX: use push() keyed entries instead of array transaction to avoid
-// Firebase RTDB array→object coercion that corrupts entry ordering
 // ═══════════════════════════════════════════════════════════════
 function saveGame() {
   const sorted = getSortedPlayers();
@@ -1674,20 +1729,17 @@ function saveGame() {
   };
   const histRef = ref(db, (window._ACTIVE_ROOT||ROOT)+'/history');
   push(histRef, entry)
-    .then(() => {
-      // Update local gameHistory immediately so renderHistory reflects the new entry
-      gameHistory = [entry, ...gameHistory].slice(0, 60);
-      // Prune to max 60 entries
-      return runTransaction(histRef, cur => {
+    .then(()=>{
+      gameHistory = [entry,...gameHistory].slice(0,60);
+      return runTransaction(histRef, cur=>{
         if (!cur) return cur;
         const arr = Array.isArray(cur) ? cur : Object.values(cur);
         if (arr.length <= 60) return cur;
-        // If push-keyed object, remove oldest keys
         if (!Array.isArray(cur)) {
-          const sorted = Object.entries(cur)
+          const sortedEntries = Object.entries(cur)
             .filter(([,v])=>v)
             .sort((a,b)=>(a[1].savedAt||a[1].id||0)-(b[1].savedAt||b[1].id||0));
-          const toRemove = sorted.slice(0, sorted.length - 60);
+          const toRemove = sortedEntries.slice(0, sortedEntries.length-60);
           const updated = {...cur};
           toRemove.forEach(([k])=>delete updated[k]);
           return updated;
@@ -1707,11 +1759,9 @@ window.saveGame = saveGame;
 
 function renderHistory(el) {
   if (!el) return;
-  if (!gameHistory.length) {
-    el.innerHTML='<div class="empty">No saved games yet.</div>'; return;
-  }
+  if (!gameHistory.length) { el.innerHTML='<div class="empty">No saved games yet.</div>'; return; }
   el.innerHTML = gameHistory.map((e,i)=>{
-    const max   = Math.max(...(e.teams||[]).map(t=>t.score));
+    const max   = e.teams&&e.teams.length ? Math.max(...e.teams.map(t=>t.score)) : 0;
     const chips = (e.teams||[]).map(t=>{
       const w = t.score===max && (e.teams||[]).filter(x=>x.score===max).length===1;
       return `<span class="chip${w?' win':''}"
@@ -1735,42 +1785,35 @@ function renderHistory(el) {
   };
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-// RESTORE HISTORY  (test case #30)
+// RESTORE HISTORY
 // ═══════════════════════════════════════════════════════════════
 function restoreHistory(idx) {
   const entry = gameHistory[idx];
   if (!entry || !entry.teams) { showToast('Cannot restore — entry has no teams', true); return; }
   if (MY_PLAYER_ID !== hostId) { showToast('Only the host can restore a game state', true); return; }
-  if (!confirm('Restore scores from "' + entry.game + ' · Round ' + entry.round + '"? This will overwrite current scores.')) return;
+  if (!confirm('Restore scores from "'+entry.game+' · Round '+entry.round+'"? This will overwrite current scores.')) return;
   const updatedPlayers = {};
-  const teamList = entry.teams;
-  // Match saved teams to current players by name
   const currentPids = Object.keys(players);
-  teamList.forEach((saved, i) => {
-    const pid = currentPids.find(p => players[p].name === saved.name) || currentPids[i];
+  entry.teams.forEach((saved,i)=>{
+    const pid = currentPids.find(p=>players[p].name===saved.name) || currentPids[i];
     if (pid && players[pid]) {
-      updatedPlayers['players/' + pid + '/score'] = saved.score;
+      updatedPlayers['players/'+pid+'/score'] = saved.score;
     }
   });
-  if (Object.keys(updatedPlayers).length === 0) { showToast('Could not match any teams', true); return; }
-  // Single atomic push: scores + round + title together (prevents double-echo suppression)
-  pushRemote({ ...updatedPlayers, round: entry.round, title: entry.game });
+  if (Object.keys(updatedPlayers).length===0) { showToast('Could not match any teams', true); return; }
+  pushRemote({ ...updatedPlayers, round:entry.round, title:entry.game });
   document.getElementById('game-title').value = entry.game;
   autoSize(document.getElementById('game-title'));
-  showToast('Restored: ' + entry.game + ' ↩');
+  showToast('Restored: '+entry.game+' ↩');
 }
 window.restoreHistory = restoreHistory;
 
 function delHistory(idx) {
   const entryId = gameHistory[idx]?.id;
   if (!entryId) return;
-  // B-4 FIX: filter from the push-keyed object by matching entry.id
   runTransaction(ref(db, (window._ACTIVE_ROOT||ROOT)+'/history'), cur=>{
     if (!cur) return cur;
-    // cur is a push-keyed object: { "-abc": {...}, "-def": {...} }
-    const entries = Array.isArray(cur) ? cur : cur;
     if (Array.isArray(cur)) {
       return cur.filter(e=>e && e.id!==entryId);
     } else {
@@ -1784,10 +1827,8 @@ function delHistory(idx) {
       if (!v) { gameHistory=[]; }
       else {
         const entries = Array.isArray(v) ? v : Object.values(v);
-        gameHistory = entries
-          .filter(Boolean)
-          .sort((a,b)=>(b.savedAt||b.id||0)-(a.savedAt||a.id||0))
-          .slice(0,60);
+        gameHistory = entries.filter(Boolean)
+          .sort((a,b)=>(b.savedAt||b.id||0)-(a.savedAt||a.id||0)).slice(0,60);
       }
       renderHistory(document.getElementById('hist-list'));
       if (gameState==='finished') renderHistory(document.getElementById('hist-list-fin'));
@@ -1797,7 +1838,7 @@ function delHistory(idx) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// STATS
+// STATS — v16: handles negative scores correctly
 // ═══════════════════════════════════════════════════════════════
 function updateStats() {
   const el = document.getElementById('stats');
@@ -1807,14 +1848,16 @@ function updateStats() {
   const leader  = sorted[0];
   const gap     = sorted.length>1 ? sorted[0].score-sorted[1].score : 0;
   const curName = players[currentTurn]?.name||'—';
-  // TC#24: if there's a tie for first place, "Leading" should show no single winner
+  // TC#24: tie handling — if multiple players share top score, no single leader
   const topScore = leader ? leader.score : 0;
   const tiedForFirst = sorted.filter(t=>t.score===topScore).length > 1;
-  const leaderName = (!leader || topScore===0 || tiedForFirst) ? '—' : esc(leader.name);
+  // v16: also suppress leader crown when all scores are 0 AND there's more than 1 player
+  const allZero = sorted.every(t=>t.score===0);
+  const leaderName = (!leader || (allZero && sorted.length>1) || tiedForFirst) ? '—' : esc(leader.name);
   el.innerHTML = `
     <div class="stat"><div class="stat-l">Total Points</div><div class="stat-v">${fmtScore(total)}</div></div>
     <div class="stat"><div class="stat-l">Leading</div><div class="stat-v" style="font-size:.9rem;padding-top:8px">${leaderName}</div></div>
-    <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${tiedForFirst?0:fmtScore(gap)}</div></div>
+    <div class="stat"><div class="stat-l">Points Ahead</div><div class="stat-v">${tiedForFirst||allZero?'—':fmtScore(gap)}</div></div>
     <div class="stat"><div class="stat-l">Saved Games</div><div class="stat-v">${gameHistory.length}</div></div>
     <div class="stat"><div class="stat-l">Round</div><div class="stat-v">${roundNum}</div></div>
     <div class="stat"><div class="stat-l">Current Turn</div><div class="stat-v" style="font-size:.9rem;padding-top:8px">${esc(curName)}</div></div>
@@ -1830,15 +1873,8 @@ function pushRemote(partial) {
   saveLocal();
 }
 
-function pushTeams() {
-  // Build flat player score updates
-  const updates = {};
-  Object.entries(players).forEach(([pid,p])=>{ updates[`players/${pid}/score`]=p.score; });
-  pushRemote(updates);
-}
-
 // ═══════════════════════════════════════════════════════════════
-// TITLE SYNC (host only)
+// TITLE SYNC
 // ═══════════════════════════════════════════════════════════════
 let titleTimer;
 function syncTitle() {
@@ -1849,19 +1885,20 @@ function syncTitle() {
 window.syncTitle = syncTitle;
 
 // ═══════════════════════════════════════════════════════════════
-// LOCAL PERSISTENCE
+// LOCAL PERSISTENCE — v16: persists scoringMode
 // ═══════════════════════════════════════════════════════════════
 function saveLocal() {
   try {
     const AR = window._ACTIVE_ROOT || ROOT;
+    if (!AR) return;
     const roomKey = 'sb_' + AR.replace('rooms/','');
     localStorage.setItem(roomKey, JSON.stringify({
       state:gameState, hostId, currentTurn, turnIndex, turnOrder,
-      players, round:roundNum, gameHistory, savedAt:Date.now()
+      players, round:roundNum, gameHistory, scoringMode,
+      savedAt:Date.now()
     }));
   } catch(e){}
 }
-
 
 function loadLocalState(roomId) {
   try {
@@ -1870,7 +1907,6 @@ function loadLocalState(roomId) {
     if (!raw) return;
     const cached = JSON.parse(raw);
     if (!cached || !cached.players) return;
-    // Apply cached state optimistically until Firebase fires
     gameState   = cached.state   || 'lobby';
     hostId      = cached.hostId  || null;
     currentTurn = cached.currentTurn || null;
@@ -1879,10 +1915,12 @@ function loadLocalState(roomId) {
     roundNum    = cached.round       || 1;
     players     = cached.players     || {};
     gameHistory = (cached.gameHistory||[]).slice(0,60);
+    scoringMode = cached.scoringMode || 'self'; // v16
     localTeams  = playersToTeams(players);
     renderView(true);
   } catch(e) {}
 }
+
 // ═══════════════════════════════════════════════════════════════
 // TIMER
 // ═══════════════════════════════════════════════════════════════
@@ -1916,14 +1954,14 @@ function startLocalTick() {
     lastSyncedSeconds=secs; timerLeft=secs; renderTimerDisplay(secs);
     if (secs<=3&&secs>0){playBeep(secs===1?1200:secs===2?1000:800);if(!cdBusy)showCountdown(secs);}
     if (secs<=0){
-      stopLocalTick();timerOn=false;
+      stopLocalTick(); timerOn=false;
       document.getElementById('t-play').style.display='flex';
       document.getElementById('t-pause').style.display='none';
-      playAlarm();showCountdown(0);
+      playAlarm(); showCountdown(0);
     }
   },100);
 }
-function stopLocalTick(){ if(timerInt){clearInterval(timerInt);timerInt=null;} }
+function stopLocalTick() { if(timerInt){clearInterval(timerInt);timerInt=null;} }
 
 function renderTimerDisplay(secs) {
   const el=document.getElementById('timer-disp');
@@ -1938,12 +1976,12 @@ function pushTimerState(running, overrideMs) {
   const now=serverNow();
   if (running) {
     const ms=overrideMs!==undefined?overrideMs:(timerPausedLeft!==null?timerPausedLeft:timerDurationMs);
-    timerStartedAt=now;timerDurationMs=ms;timerPausedLeft=null;
+    timerStartedAt=now; timerDurationMs=ms; timerPausedLeft=null;
     pushRemote({timer:{secs:timerSecs,durationMs:ms,running:true,startedAt:now,remainingMs:null,pausedAt:null}});
   } else {
     const elapsed=timerStartedAt?serverNow()-timerStartedAt:0;
     const rem=Math.max(0,timerDurationMs-elapsed);
-    timerPausedLeft=rem;timerStartedAt=null;
+    timerPausedLeft=rem; timerStartedAt=null;
     pushRemote({timer:{secs:timerSecs,durationMs:timerDurationMs,running:false,startedAt:null,remainingMs:rem,pausedAt:now}});
   }
 }
@@ -1951,8 +1989,8 @@ function pushTimerState(running, overrideMs) {
 function setPreset(mins,el){
   document.querySelectorAll('.t-pre').forEach(e=>e.classList.remove('on'));
   if(el)el.classList.add('on');
-  timerSecs=mins*60;timerDurationMs=timerSecs*1000;timerLeft=timerSecs;timerPausedLeft=timerDurationMs;
-  stopLocalTick();timerOn=false;lastSyncedSeconds=-1;
+  timerSecs=mins*60; timerDurationMs=timerSecs*1000; timerLeft=timerSecs; timerPausedLeft=timerDurationMs;
+  stopLocalTick(); timerOn=false; lastSyncedSeconds=-1;
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
@@ -1964,8 +2002,8 @@ function setCustomTimer(){
   const v=parseInt(document.getElementById('t-custom-inp').value);
   if(!v||v<1)return;
   document.querySelectorAll('.t-pre').forEach(e=>e.classList.remove('on'));
-  timerSecs=v*60;timerDurationMs=timerSecs*1000;timerLeft=timerSecs;timerPausedLeft=timerDurationMs;
-  stopLocalTick();timerOn=false;lastSyncedSeconds=-1;
+  timerSecs=v*60; timerDurationMs=timerSecs*1000; timerLeft=timerSecs; timerPausedLeft=timerDurationMs;
+  stopLocalTick(); timerOn=false; lastSyncedSeconds=-1;
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
@@ -1974,20 +2012,20 @@ function setCustomTimer(){
 window.setCustomTimer=setCustomTimer;
 
 function startTimer(){
-  if(timerOn)return;
+  if(timerOn) return;
   const ms=timerPausedLeft!==null?timerPausedLeft:timerDurationMs;
-  if(ms<=0){timerDurationMs=timerSecs*1000;timerPausedLeft=timerDurationMs;}
+  if(ms<=0){timerDurationMs=timerSecs*1000; timerPausedLeft=timerDurationMs;}
   timerOn=true;
   document.getElementById('t-play').style.display='none';
   document.getElementById('t-pause').style.display='flex';
-  pushTimerState(true,timerPausedLeft!==null?timerPausedLeft:timerDurationMs);
+  pushTimerState(true, timerPausedLeft!==null?timerPausedLeft:timerDurationMs);
   startLocalTick();
 }
 window.startTimer=startTimer;
 
 function pauseTimer(){
-  if(!timerOn)return;
-  timerOn=false;stopLocalTick();
+  if(!timerOn) return;
+  timerOn=false; stopLocalTick();
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   pushTimerState(false);
@@ -1996,8 +2034,8 @@ window.pauseTimer=pauseTimer;
 
 function resetTimer(){
   stopLocalTick();
-  timerOn=false;timerLeft=timerSecs;timerDurationMs=timerSecs*1000;
-  timerPausedLeft=timerDurationMs;timerStartedAt=null;lastSyncedSeconds=-1;
+  timerOn=false; timerLeft=timerSecs; timerDurationMs=timerSecs*1000;
+  timerPausedLeft=timerDurationMs; timerStartedAt=null; lastSyncedSeconds=-1;
   document.getElementById('t-play').style.display='flex';
   document.getElementById('t-pause').style.display='none';
   renderTimerDisplay(timerLeft);
@@ -2008,14 +2046,14 @@ window.resetTimer=resetTimer;
 function toggleTimer(){
   timerHide=!timerHide;
   const p=document.getElementById('timer-panel');
-  [...p.children].forEach(c=>{if(!c.classList.contains('t-hide'))c.style.display=timerHide?'none':'';});
+  [...p.children].forEach(c=>{ if(!c.classList.contains('t-hide')) c.style.display=timerHide?'none':''; });
   p.querySelector('.t-hide').textContent=timerHide?'Show Timer':'Hide Timer';
-  if(timerHide)pauseTimer();
+  if(timerHide) pauseTimer();
 }
 window.toggleTimer=toggleTimer;
 
 function showCountdown(n){
-  if(cdBusy&&n!==0)return;
+  if(cdBusy&&n!==0) return;
   cdBusy=true;
   const ov=document.getElementById('cdown');
   const nm=document.getElementById('cdown-num');
@@ -2041,7 +2079,6 @@ function getShareUrl(){
 function openQR(){
   const url=getShareUrl();
   if(!url){showToast('⚠️ Host this file on a web server to share via QR',true);return;}
-  // TC#34: Always verify the QR URL matches current URL; regenerate if stale
   const existingUrlText = document.getElementById('qr-url-text').textContent;
   document.getElementById('qr-url-text').textContent=url;
   if(!qrGenerated || existingUrlText !== url){
@@ -2055,7 +2092,7 @@ function openQR(){
 function closeQR(){document.getElementById('qr-modal').classList.remove('show');}
 window.openQR=openQR; window.closeQR=closeQR;
 document.getElementById('qr-modal').addEventListener('click',e=>{
-  if(e.target===document.getElementById('qr-modal'))closeQR();
+  if(e.target===document.getElementById('qr-modal')) closeQR();
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -2068,14 +2105,22 @@ function updateClock(){
   if(dd) dd.textContent=now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
   if(td) td.textContent=now.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
 }
-function autoSize(el){el.style.width='10px';el.style.width=(el.scrollWidth+6)+'px';}
+function autoSize(el){
+  if(!el) return;
+  el.style.width='10px'; el.style.width=(el.scrollWidth+6)+'px';
+}
 function esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function fmtScore(n){ return Number(n||0).toLocaleString(); }
+// v16: fmtScore handles negatives — use minus sign (−) not hyphen
+function fmtScore(n) {
+  const num = Number(n||0);
+  if (num < 0) return '−' + Math.abs(num).toLocaleString();
+  return num.toLocaleString();
+}
 
 let toastTimer;
-function showToast(msg, isErr=false){
+function showToast(msg,isErr=false){
   const t=document.getElementById('toast');
   t.textContent=msg;
   t.className='toast show'+(isErr?' err':'');
@@ -2084,7 +2129,7 @@ function showToast(msg, isErr=false){
 }
 function showError(msg){
   const b=document.getElementById('err-banner');
-  if(b){b.textContent='⚠️ '+msg;b.classList.add('show');}
+  if(b){b.textContent='⚠️ '+msg; b.classList.add('show');}
 }
 window.autoSize=autoSize;
 
